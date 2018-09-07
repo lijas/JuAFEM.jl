@@ -54,8 +54,8 @@ end
 """
 A `Grid` is a collection of `Cells` and `Node`s which covers the computational domain, together with Sets of cells, nodes and faces.
 """
-mutable struct Grid{dim,N,T<:Real,M}
-    cells::Vector{Cell{dim,N,M}}
+mutable struct Grid{dim,T<:Real,C<:Cell}
+    cells::Vector{C}
     nodes::Vector{Node{dim,T}}
     # Sets
     cellsets::Dict{String,Set{Int}}
@@ -65,12 +65,12 @@ mutable struct Grid{dim,N,T<:Real,M}
     boundary_matrix::SparseMatrixCSC{Bool,Int}
 end
 
-function Grid(cells::Vector{Cell{dim,N,M}},
+function Grid(cells::Vector{C},
               nodes::Vector{Node{dim,T}};
               cellsets::Dict{String,Set{Int}}=Dict{String,Set{Int}}(),
               nodesets::Dict{String,Set{Int}}=Dict{String,Set{Int}}(),
               facesets::Dict{String,Set{Tuple{Int,Int}}}=Dict{String,Set{Tuple{Int,Int}}}(),
-              boundary_matrix::SparseMatrixCSC{Bool,Int}=spzeros(Bool, 0, 0)) where {dim,N,M,T}
+              boundary_matrix::SparseMatrixCSC{Bool,Int}=spzeros(Bool, 0, 0)) where {dim,T,C}
     return Grid(cells, nodes, cellsets, nodesets, facesets, boundary_matrix)
 end
 
@@ -189,21 +189,21 @@ end
 
 Update the coordinate vector `x` for cell number `cell`.
 """
-@inline function getcoordinates!(x::Vector{Vec{dim,T}}, grid::Grid{dim,N,T}, cell::Int) where {dim,T,N}
-    @assert length(x) == N
-    @inbounds for i in 1:N
+@inline function getcoordinates!(x::Vector{Vec{dim,T}}, grid::Grid{dim,T}, cell::Int) where {dim,T}
+    @assert length(x) == nnodes(grid.cells[cell])
+    @inbounds for i in 1:nnodes(grid.cells[cell])
         x[i] = grid.nodes[grid.cells[cell].nodes[i]].x
     end
 end
-@inline getcoordinates!(x::Vector{Vec{dim,T}}, grid::Grid{dim,N,T}, cell::CellIndex) where {dim, T, N} = getcoordinates!(x, grid, cell.idx)
-@inline getcoordinates!(x::Vector{Vec{dim,T}}, grid::Grid{dim,N,T}, face::FaceIndex) where {dim, T, N} = getcoordinates!(x, grid, face.idx[1])
+@inline getcoordinates!(x::Vector{Vec{dim,T}}, grid::Grid{dim,T}, cell::CellIndex) where {dim, T} = getcoordinates!(x, grid, cell.idx)
+@inline getcoordinates!(x::Vector{Vec{dim,T}}, grid::Grid{dim,T}, face::FaceIndex) where {dim, T} = getcoordinates!(x, grid, face.idx[1])
 
 """
     getcoordinates(grid::Grid, cell)
 
 Return a vector with the coordinates of the vertices of cell number `cell`.
 """
-@inline function getcoordinates(grid::Grid{dim,N,T}, cell::Int) where {dim,N,T}
+@inline function getcoordinates(grid::Grid{dim,T}, cell::Int) where {dim,T}
     nodeidx = grid.cells[cell].nodes
     return [grid.nodes[i].x for i in nodeidx]::Vector{Vec{dim,T}}
 end

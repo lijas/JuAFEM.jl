@@ -25,44 +25,39 @@ end
 """
 struct CellIterator{dim,N,T,M}
     flags::UpdateFlags
-    grid::Grid{dim,N,T,M}
+    grid::Grid{dim,T}
     current_cellid::ScalarWrapper{Int}
     nodes::Vector{Int}
     coords::Vector{Vec{dim,T}}
-    dh::DofHandler{dim,N,T,M}
+    dh::DofHandler{dim,T}
     celldofs::Vector{Int}
+    cellset::Vector{Int}
 
-    function CellIterator{dim,N,T,M}(dh::DofHandler{dim,N,T,M}, flags::UpdateFlags) where {dim,N,T,M}
+    function CellIterator{dim,N,T,M}(dh::DofHandler{dim,T}, cellset::Vector{Int}, flags::UpdateFlags) where {dim,N,T,M}
         cell = ScalarWrapper(0)
         nodes = zeros(Int, N)
         coords = zeros(Vec{dim,T}, N)
         n = ndofs_per_cell(dh)
         celldofs = zeros(Int, n)
-        return new{dim,N,T,M}(flags, dh.grid, cell, nodes, coords, dh, celldofs)
+        return new{dim,N,T,M}(flags, dh.grid, cell, nodes, coords, dh, celldofs, cellset)
     end
 
-    function CellIterator{dim,N,T,M}(grid::Grid{dim,N,T,M}, flags::UpdateFlags) where {dim,N,T,M}
-        cell = ScalarWrapper(0)
-        nodes = zeros(Int, N)
-        coords = zeros(Vec{dim,T}, N)
-        return new{dim,N,T,M}(flags, grid, cell, nodes, coords)
-    end
 end
 
-CellIterator(grid::Grid{dim,N,T,M},     flags::UpdateFlags=UpdateFlags()) where {dim,N,T,M} =
-    CellIterator{dim,N,T,M}(grid, flags)
-CellIterator(dh::DofHandler{dim,N,T,M}, flags::UpdateFlags=UpdateFlags()) where {dim,N,T,M} =
-    CellIterator{dim,N,T,M}(dh, flags)
+function CellIterator(dh::DofHandler{dim,T}, element::Element, flags::UpdateFlags=UpdateFlags()) where {dim,T}
+    cellset = collect(get_elementcells(dh, element))
+    CellIterator{dim,nnodes(element),T,nfaces(element)}(dh, cellset, flags)
+end
 
 # iterator interface
 function Base.iterate(ci::CellIterator, state = 1)
-    if state > getncells(ci.grid)
+    if state > length(ci.cellset)
         return nothing
     else
         return (reinit!(ci, state), state+1)
     end
 end
-Base.length(ci::CellIterator)  = getncells(ci.grid)
+Base.length(ci::CellIterator)  = length(ci.cellset)
 
 Base.IteratorSize(::Type{T})   where {T<:CellIterator} = Base.HasLength() # this is default in Base
 Base.IteratorEltype(::Type{T}) where {T<:CellIterator} = Base.HasEltype() # this is default in Base
@@ -78,8 +73,8 @@ Base.eltype(::Type{T})         where {T<:CellIterator} = T
 @inline celldofs(ci::CellIterator) = ci.celldofs
 
 function reinit!(ci::CellIterator{dim,N}, i::Int) where {dim,N}
-    nodeids = ci.grid.cells[i].nodes
-    ci.current_cellid[] = i
+    ci.current_cellid[] = ci.cellset[i]
+    nodeids = ci.grid.cells[ci.current_cellid[]].nodes
     @inbounds for j in 1:N
         nodeid = nodeids[j]
         ci.flags.nodes  && (ci.nodes[j] = nodeid)

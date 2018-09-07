@@ -1,4 +1,11 @@
 export
+
+#Other
+Element,
+GenericElement,
+Field,
+push_element!,
+
 # Interpolations
     Interpolation,
     RefCube,
@@ -73,6 +80,7 @@ export
     addcellset!,
     transform!,
     generate_grid,
+    default_interpolation,
 
 # Dofs
     DofHandler,
