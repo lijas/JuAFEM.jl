@@ -184,6 +184,72 @@ function addnodeset!(grid::Grid, name::String, f::Function)
     grid
 end
 
+""" 
+    gridmerge()
+
+Merges two grids
+"""
+
+function gridmerge(grid1::Grid, grid2::Grid)
+
+    nnodesgrid1 = length(grid1.nodes)
+    ncellsgrid1 = length(grid1.cells)
+
+    offseted_grid2cells = Cell{dim}[];
+
+    #For all cells in grid2, increment the nodeids
+    for cells in grid2.cells
+        for cell in cells
+            N = length(cell.nodes)
+            M = nfaces(cell)
+            offset_nodes = [n + nnodesgrid1 for n in cell.nodes]
+            offset_cell  = Cell{dim,N,M}(NTuple{N,Int}(tuple(offset_nodes...)));
+            push!(offseted_grid2cells, offset_cell)
+        end
+    end
+
+    #new nodes
+    nodes_new = vcat(grid1.nodes, grid2.nodes)
+    cells_new = vcat(grid2.cells, offseted_grid2cells)
+
+    #Update sets
+    faceset_new = Dict{String, Set{Tuple{Int,Int}}}()
+    nodeset_new = Dict{String, Set{Int}}()
+    cellset_new = Dict{String, Set{Int}}()
+
+    #update grid2 faceset cell ids
+    grid2_new_facesets = Dict{String, Set{Tuple{Int,Int}}}()
+    for (facesetname, faceset) in grid2.facesets
+        tmp_faceset = Set{Tuple{Int,Int}}()
+        for (cellid, faceidx) in faceset
+            push!(tmp_faceset, (cellid + ncellsgrid1, faceidx))
+        end
+        grid2_new_facesets[facesetname * "2"] =  tmp_faceset
+    end
+
+    #update grid2 nodesets node id
+    grid2_new_nodesets = Dict{String, Set{Int}}()
+    for (nodesetname, nodeset) in grid2.nodesets
+        tmp_nodeset = Set{Int}()
+        for nodeid in nodeset
+            push!(tmp_nodeset, nodeid + nnodesgrid1)
+        end
+        grid2_new_nodesets[nodesetname * "2"] =  tmp_nodeset
+    end
+
+    merge!(faceset_new, grid1.facesets, grid2_new_facesets)
+    merge!(nodeset_new, grid1.nodesets, grid2_new_nodesets)
+    merge!(cellset_new, grid1.cellsets, grid2.cellsets)
+
+    bm = spzeros(Bool, 0, 0)
+    #warning("ignoring boundary_matrix when merging")
+    #Dont know how to combine:
+    #boundary_matrix::SparseMatrixCSC{Bool, Int}
+    
+    return Grid(cells_new, nodes_new, cellset_new, nodeset_new, faceset_new, bm)
+
+end
+
 """
     getcoordinates!(x::Vector, grid::Grid, cell::Int)
 
