@@ -55,6 +55,7 @@ end
 ndofs(el::Element) = sum([getnbasefunctions(field.interpolation)::Int * field.dim for field in el.fields])
 nnodes(el::Element) = nnodes(el.celltype)
 nfaces(el::Element) = nfaces(el.celltype)
+celltype(el::Element) = el.celltype
 
 """
     DofHandler(grid::Grid)
