@@ -12,10 +12,14 @@ heatelement = GenericElement(:heatelement, Quadrilateral)
 push!(heatelement, Field(:T, default_interpolation(Quadrilateral),1))
 
 dh = DofHandler(grid)
-push_element!(dh, heatelement, Set(collect(1:400))) # Add a temperature field
+push_element!(dh, heatelement, Set(collect(1:length(grid.cells)))) # Add a temperature field
 close!(dh)
-@show dh
-
+@show dh.cell_dofs
+@show dh.cell_dofs_offset
+@show grid.cells[1].nodes
+@show grid.cells[2].nodes
+@show getcoordinates(grid,1)
+@show getcoordinates(grid,2)
 dbcs = ConstraintHandler(dh)
 dbc = Dirichlet(:T, heatelement, union(getfaceset(grid, "left"), getfaceset(grid, "right"), getfaceset(grid, "top"), getfaceset(grid, "bottom")), (x,t)->0)
 add!(dbcs, dbc)

@@ -37,7 +37,7 @@ struct CellIterator{dim,N,T,M}
         cell = ScalarWrapper(0)
         nodes = zeros(Int, N)
         coords = zeros(Vec{dim,T}, N)
-        n = ndofs_per_cell(dh)
+        n = ndofs_per_cell(dh, first(cellset))
         celldofs = zeros(Int, n)
         return new{dim,N,T,M}(flags, dh.grid, cell, nodes, coords, dh, celldofs, cellset)
     end
@@ -45,7 +45,9 @@ struct CellIterator{dim,N,T,M}
 end
 
 function CellIterator(dh::DofHandler{dim,T}, element::Element, flags::UpdateFlags=UpdateFlags()) where {dim,T}
-    cellset = collect(get_elementcells(dh, element))
+    CellIterator{dim,nnodes(element),T,nfaces(element)}(dh, collect(get_elementcells(dh, element)), flags)
+end
+function CellIterator(dh::DofHandler{dim,T}, element::Element, cellset::Vector{Int}, flags::UpdateFlags=UpdateFlags()) where {dim,T}
     CellIterator{dim,nnodes(element),T,nfaces(element)}(dh, cellset, flags)
 end
 
@@ -75,6 +77,7 @@ Base.eltype(::Type{T})         where {T<:CellIterator} = T
 function reinit!(ci::CellIterator{dim,N}, i::Int) where {dim,N}
     ci.current_cellid[] = ci.cellset[i]
     nodeids = ci.grid.cells[ci.current_cellid[]].nodes
+
     @inbounds for j in 1:N
         nodeid = nodeids[j]
         ci.flags.nodes  && (ci.nodes[j] = nodeid)

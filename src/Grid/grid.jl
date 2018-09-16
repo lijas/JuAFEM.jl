@@ -50,6 +50,7 @@ A `FaceIndex` wraps an (Int, Int) and defines a face by pointing to a (cell, fac
 struct FaceIndex
     idx::Tuple{Int,Int} # cell and side
 end
+Base.getindex(fi::FaceIndex, i::Int) = fi.idx[i]
 
 """
 A `Grid` is a collection of `Cells` and `Node`s which covers the computational domain, together with Sets of cells, nodes and faces.
@@ -190,27 +191,26 @@ end
 Merges two grids
 """
 
-function gridmerge(grid1::Grid, grid2::Grid)
-
+function gridmerge(grid1::Grid{dim1}, grid2::Grid{dim2}) where {dim1, dim2}
+    @assert dim1 == dim2
+    dim = dim1
     nnodesgrid1 = length(grid1.nodes)
     ncellsgrid1 = length(grid1.cells)
 
     offseted_grid2cells = Cell{dim}[];
 
     #For all cells in grid2, increment the nodeids
-    for cells in grid2.cells
-        for cell in cells
-            N = length(cell.nodes)
-            M = nfaces(cell)
-            offset_nodes = [n + nnodesgrid1 for n in cell.nodes]
-            offset_cell  = Cell{dim,N,M}(NTuple{N,Int}(tuple(offset_nodes...)));
-            push!(offseted_grid2cells, offset_cell)
-        end
+    for cell in grid2.cells
+        N = length(cell.nodes)
+        M = nfaces(cell)
+        offset_nodes = [n + nnodesgrid1 for n in cell.nodes]
+        offset_cell  = Cell{dim,N,M}(NTuple{N,Int}(tuple(offset_nodes...)));
+        push!(offseted_grid2cells, offset_cell)
     end
 
     #new nodes
     nodes_new = vcat(grid1.nodes, grid2.nodes)
-    cells_new = vcat(grid2.cells, offseted_grid2cells)
+    cells_new = vcat(grid1.cells, offseted_grid2cells)
 
     #Update sets
     faceset_new = Dict{String, Set{Tuple{Int,Int}}}()
@@ -286,7 +286,7 @@ function Base.iterate(c::Vector{Cell{dim,N}}, state = 1) where {dim, N}
 end
 
 function Base.show(io::IO, grid::Grid)
-    print(io, "$(typeof(grid)) with $(getncells(grid)) $(celltypes[eltype(grid.cells)]) cells and $(getnnodes(grid)) nodes")
+    print(io, "$(typeof(grid)) with $(getncells(grid)) and $(getnnodes(grid)) nodes")
 end
 
 const celltypes = Dict{DataType, String}(Cell{1,2,2}  => "Line",

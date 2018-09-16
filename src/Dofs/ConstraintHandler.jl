@@ -26,11 +26,14 @@ dbc = Dirichlet(:u, ∂Ω, (x, t) -> sin(t), [1, 3]) # applied to component 1 an
 `Dirichlet` boundary conditions are added to a [`ConstraintHandler`](@ref)
 which applies the condition via `apply!`.
 """
-struct Dirichlet # <: Constraint
+struct Dirichlet{T} # <: Constraint
     f::Function # f(x,t) -> value
     faces::Union{Set{Int},Set{Tuple{Int,Int}}}
     field_name::Symbol
-    element::Element
+    field_interpolation::Interpolation
+    field_dim::Int
+    field_offset::Int
+    bcvalues::BCValues{T}
     components::Vector{Int} # components of the field
     local_face_dofs::Vector{Int}
     local_face_dofs_offset::Vector{Int}
@@ -41,7 +44,8 @@ end
 function Dirichlet(field_name::Symbol, el::Element, faces::Union{Set{Int},Set{Tuple{Int,Int}}}, f::Function, components::Vector{Int})
     unique(components) == components || error("components not unique: $components")
     # issorted(components) || error("components not sorted: $components")
-    return Dirichlet(f, faces, field_name, el, components, Int[], Int[])
+    field = get_field(el, field_name)
+    return Dirichlet(f, faces, field_name, field.interpolation, field.dim, field_offset(el,field_name), get_bcvalue(el, field_name), components, Int[], Int[])
 end
 
 """
@@ -116,9 +120,7 @@ Add a `Dirichlet boundary` condition to the `ConstraintHandler`.
 """
 function add!(ch::ConstraintHandler, dbc::Dirichlet)
     #dbc_check(ch, dbc)
-
-    field = get_field(dbc.element, dbc.field_name)
-    _add!(ch, dbc, dbc.faces, field.interpolation, field.dim, field_offset(dbc.element, dbc.field_name))
+    _add!(ch, dbc, dbc.faces, dbc.field_interpolation, dbc.field_dim, dbc.field_offset)
     return ch
 end
 
@@ -140,7 +142,7 @@ function _add!(ch::ConstraintHandler, dbc::Dirichlet, bcfaces::Set{Tuple{Int,Int
 
     # loop over all the faces in the set and add the global dofs to `constrained_dofs`
     constrained_dofs = Int[]
-    _celldofs = fill(0, ndofs(dbc.element))
+    _celldofs = fill(0, ndofs_per_cell(ch.dh, first(bcfaces)[1]))
     for (cellidx, faceidx) in bcfaces
         celldofs!(_celldofs, ch.dh, cellidx) # extract the dofs for this cell
         r = local_face_dofs_offset[faceidx]:(local_face_dofs_offset[faceidx+1]-1)
@@ -204,18 +206,21 @@ function update!(ch::ConstraintHandler, time::Float64=0.0)
     for dbc in ch.dbcs
         # Function barrier
         _update!(ch.values, dbc.f, dbc.faces, dbc.field_name, dbc.local_face_dofs, dbc.local_face_dofs_offset,
-                 dbc.components, ch.dh, get_bcvalue(dbc.element, dbc.field_name), ch.dofmapping, dbc.element, time)
+                 dbc.components, ch.dh, dbc.bcvalues, ch.dofmapping, time)
     end
 end
 
 # for faces
 function _update!(values::Vector{Float64}, f::Function, faces::Set{Tuple{Int,Int}}, field::Symbol, local_face_dofs::Vector{Int}, local_face_dofs_offset::Vector{Int},
                   components::Vector{Int}, dh::DofHandler{dim,T}, facevalues::BCValues,
-                  dofmapping::Dict{Int,Int}, element::Element, time::Float64) where {dim,T}
+                  dofmapping::Dict{Int,Int}, time::Float64) where {dim,T}
     grid = dh.grid
-    N = nnodes(element)
+
+    #Could probobly cache ndofs_per_cell and N in Dirichlet
+    random_cell = first(faces)[1]
+    N = length(grid.cells[random_cell].nodes)#nnodes(element)
     xh = zeros(Vec{dim, T}, N) # pre-allocate
-    _celldofs = fill(0, ndofs(element))
+    _celldofs = fill(0, ndofs_per_cell(dh, random_cell))
 
     for (cellidx, faceidx) in faces
         getcoordinates!(xh, grid, cellidx)
@@ -249,7 +254,7 @@ end
 # for nodes
 function _update!(values::Vector{Float64}, f::Function, nodes::Set{Int}, field::Symbol, nodeidxs::Vector{Int}, globaldofs::Vector{Int},
                   components::Vector{Int}, dh::DofHandler{dim,T}, facevalues::BCValues,
-                  dofmapping::Dict{Int,Int}, element::Element, time::Float64) where {dim,T}
+                  dofmapping::Dict{Int,Int}, time::Float64) where {dim,T}
     counter = 1
     for (idx, nodenumber) in enumerate(nodeidxs)
         x = dh.grid.nodes[nodenumber].x
@@ -306,9 +311,9 @@ function apply!(v::Vector, ch::ConstraintHandler)
     return v
 end
 
-function apply_zero!(v::Vector, ch::ConstraintHandler)
+function apply_zero!(v::Vector, ch::ConstraintHandler{DH,T}) where {DH,T}
     @assert length(v) == ndofs(ch.dh)
-    v[ch.prescribed_dofs] = 0 # .= ?
+    v[ch.prescribed_dofs] = zeros(T, length(ch.prescribed_dofs)) # .= ?
     return v
 end
 

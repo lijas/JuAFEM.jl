@@ -17,10 +17,10 @@ cell_to_vtkcell(::Type{QuadraticTetrahedron}) = VTKCellTypes.VTK_QUADRATIC_TETRA
 Create a unstructured VTK grid from a `Grid`. Return a `DatasetFile`
 which data can be appended to, see `vtk_point_data` and `vtk_cell_data`.
 """
-function WriteVTK.vtk_grid(filename::AbstractString, grid::Grid{dim,T}) where {dim,T}
-    celltype = cell_to_vtkcell(getcelltype(grid))
+function WriteVTK.vtk_grid(filename::AbstractString, grid::Grid{dim,T}) where {dim,T}    
     cls = MeshCell[]
     for cell in grid.cells
+        celltype = cell_to_vtkcell(typeof(cell))
         push!(cls, MeshCell(celltype, collect(cell.nodes)))
     end
     coords = reshape(reinterpret(T, getnodes(grid)), (dim, getnnodes(grid)))

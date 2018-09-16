@@ -215,16 +215,16 @@ struct BCValues{T}
     current_face::ScalarWrapper{Int}
 end
 
-BCValues(func_interpol::Interpolation, geom_interpol::Interpolation) =
-    BCValues(Float64, func_interpol, geom_interpol)
+BCValues(func_interpol::Interpolation, geom_interpol::Interpolation, faces_or_vertex::F = JuAFEM.faces) where F =
+    BCValues(Float64, func_interpol, geom_interpol, faces_or_vertex)
 
-function BCValues(::Type{T}, func_interpol::Interpolation{dim,refshape}, geom_interpol::Interpolation{dim,refshape}) where {T,dim,refshape}
+function BCValues(::Type{T}, func_interpol::Interpolation{dim,refshape}, geom_interpol::Interpolation{dim,refshape}, faces_or_vertex::F = JuAFEM.faces) where {T,dim,refshape,F}
     # set up quadrature rules for each face with dof-positions
     # (determined by func_interpol) as the quadrature points
     interpolation_coords = reference_coordinates(func_interpol)
 
     qrs = QuadratureRule{dim,refshape,T}[]
-    for face in faces(func_interpol)
+    for face in faces_or_vertex(func_interpol)
         dofcoords = Vec{dim,T}[]
         for facedof in face
             push!(dofcoords, interpolation_coords[facedof])
@@ -250,11 +250,15 @@ end
 getnquadpoints(bcv::BCValues) = size(bcv.M, 2)
 function spatial_coordinate(bcv::BCValues, q_point::Int, xh::AbstractVector{Vec{dim,T}}) where {dim,T}
     n_base_funcs = size(bcv.M, 1)
+
     @assert length(xh) == n_base_funcs
     x = zero(Vec{dim,T})
     face = bcv.current_face[]
-    @inbounds for i in 1:n_base_funcs
+    @assert face <= size(bcv.M,3)
+    
+    for i in 1:n_base_funcs
         x += bcv.M[i,q_point,face] * xh[i] # geometric_value(fe_v, q_point, i) * xh[i]
     end
+    
     return x
 end

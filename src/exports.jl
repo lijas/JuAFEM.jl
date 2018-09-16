@@ -5,6 +5,9 @@ Element,
 GenericElement,
 Field,
 push_element!,
+celltype,
+get_field,
+get_bcvalue,
 
 # Interpolations
     Interpolation,
@@ -13,7 +16,7 @@ push_element!,
     Lagrange,
     Serendipity,
     getnbasefunctions,
-
+    getorder, 
 # Quadrature
     QuadratureRule,
     getweights,
@@ -43,6 +46,7 @@ push_element!,
     getnormal,
     getdetJdV,
     getnquadpoints,
+    BCValues,
 
 # Grid
     Grid,
@@ -81,6 +85,7 @@ push_element!,
     transform!,
     generate_grid,
     default_interpolation,
+    gridmerge,
 
 # Dofs
     DofHandler,

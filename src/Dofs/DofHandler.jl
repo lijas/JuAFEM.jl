@@ -34,7 +34,12 @@ function get_field(el::Element, field_name::Symbol)
 end
 
 function get_bcvalue(el::Element, field_name::Symbol)
-    return el.bcvalues[find_field(el, field_name)]
+    if isdefined(el, :bcvalues)
+        return el.bcvalues[find_field(el, field_name)]
+    else
+        field = get_field(el,field_name)
+        return BCValues(field.interpolation, default_interpolation(celltype(el)))
+    end
 end
 
 function find_field(el::Element, field_name::Symbol)
@@ -50,6 +55,13 @@ function field_offset(el::Element, field_name::Symbol)
         offset += getnbasefunctions(field.interpolation)::Int * field.dims
     end
     return offset
+end
+
+function dof_range(element::Element, field_name::Symbol)
+    f = find_field(element, field_name)
+    offset = field_offset(element, field_name)
+    n_field_dofs = getnbasefunctions(element.fields[f].interpolation)::Int * element.fields[f].dim
+    return (offset+1):(offset+n_field_dofs)
 end
 
 ndofs(el::Element) = sum([getnbasefunctions(field.interpolation)::Int * field.dim for field in el.fields])
@@ -81,7 +93,7 @@ end
 function Base.show(io::IO, dh::DofHandler)
     println(io, "DofHandler")
     for el in dh.elements
-        println(io, "Element $(el.name)")
+        println(io, "Element $(typeof(el))")
         for field in el.fields
             println(io, "  Field: $(field.name), $(field.interpolation), $(field.dim)")
         end
@@ -197,15 +209,16 @@ function close!(dh::DofHandler{dim}) where {dim}
     # loop over all the cells, and distribute dofs for all the fields
     #for (ci, cell) in enumerate(getcells(dh.grid))
     for (ei, cellset) in enumerate(dh.elementcells)
-        for ci in cellset 
+        tmp = sort(collect(cellset))
+        for ci in tmp#cellset 
             cell = dh.grid.cells[ci]
 
             @debug println("cell #$ci")
-            for (fi, field) in enumerate(dh.elements[ei].fields)
-
+            for field in dh.elements[ei].fields
+                fi = findfirst(i->i==field.name, unique_fields)
                 interpolation_info = InterpolationInfo(field.interpolation)#interpolation_infos[fi]
 
-                @debug println("  field: $(dh.field_names[fi])")
+                @debug println("  field: $(field.name)")
                 if interpolation_info.nvertexdofs > 0
                     for vertex in vertices(cell)
                         @debug println("    vertex#$vertex")
@@ -309,6 +322,12 @@ function celldofs!(global_dofs::Vector{Int}, dh::DofHandler, i::Int)
     return global_dofs
 end
 
+function celldofs(dh::DofHandler, i::Int)
+    global_dofs = zeros(Int, ndofs_per_cell(dh,i))
+    celldofs!(global_dofs, dh, i)
+    return global_dofs
+end
+
 # Creates a sparsity pattern from the dofs in a DofHandler.
 # Returns a sparse matrix with the correct storage pattern.
 """
@@ -335,14 +354,17 @@ See the [Sparsity Pattern](@ref) section of the manual.
 
 function _create_sparsity_pattern(dh::DofHandler, sym::Bool)
     ncells = getncells(dh.grid)
-    n = ndofs_per_cell(dh)
-    N = sym ? div(n*(n+1), 2) * ncells : n^2 * ncells
-    N += ndofs(dh) # always add the diagonal elements
+    N = 10^2 * ncells #some random guess
+    #N = sym ? div(n*(n+1), 2) * ncells : n^2 * ncells
+    #N += ndofs(dh) # always add the diagonal elements
     I = Int[]; resize!(I, N)
     J = Int[]; resize!(J, N)
-    global_dofs = zeros(Int, n)
+    global_dofs = Int[]
     cnt = 0
     for element_id in 1:ncells
+        n = ndofs_per_cell(dh, element_id)
+        resize!(global_dofs, n)
+
         celldofs!(global_dofs, dh, element_id)
         @inbounds for j in 1:n, i in 1:n
             dofi = global_dofs[i]
@@ -355,7 +377,6 @@ function _create_sparsity_pattern(dh::DofHandler, sym::Bool)
             end
             I[cnt] = dofi
             J[cnt] = dofj
-
         end
     end
     @inbounds for d in 1:ndofs(dh)
@@ -398,6 +419,27 @@ WriteVTK.vtk_grid(filename::AbstractString, dh::DofHandler) = vtk_grid(filename,
 
 # Exports the FE field `u` to `vtkfile`
 function WriteVTK.vtk_point_data(vtkfile, dh::DofHandler, u::Vector)
+    for (ie, element) in enumerate(dh.elements)
+        for field in element.fields
+            field_dim = field.dim
+            space_dim = field_dim == 2 ? 3 : field_dim
+            offset = field_offset(element, field.name)
+            data = fill(0.0, space_dim, getnnodes(dh.grid))
+            for cell in CellIterator(dh, element)
+                _celldofs = celldofs(cell)
+                counter = 1            
+                for node in getnodes(cell)
+                    for d in 1:field.dim
+                        data[d, node] = u[_celldofs[counter + offset]]
+                        @debug println("  exporting $(u[_celldofs[counter + offset]]) for dof#$(_celldofs[counter + offset])")
+                        counter += 1
+                    end
+                end
+            end
+            vtk_point_data(vtkfile, data, string(field.name))
+        end
+    end
+    #=
     for f in 1:nfields(dh)
         @debug println("exporting field $(dh.field_names[f])")
         field_dim = dh.field_dims[f]
@@ -417,5 +459,6 @@ function WriteVTK.vtk_point_data(vtkfile, dh::DofHandler, u::Vector)
         end
         vtk_point_data(vtkfile, data, string(dh.field_names[f]))
     end
+    =#
     return vtkfile
 end
