@@ -30,7 +30,8 @@ function Base.push!(el::Element, field::Field)
 end
 
 function get_field(el::Element, field_name::Symbol)
-    return el.fields[find_field(el, field_name)]
+    j = find_field(el, field_name)
+    return j == nothing ? nothing : el.fields[j]
 end
 
 function get_bcvalue(el::Element, field_name::Symbol)
@@ -201,22 +202,22 @@ function close!(dh::DofHandler{dim}) where {dim}
     # for a `celldict` to keep track of which cells we have added dofs too.
 
     # not implemented yet: more than one facedof per face in 3D
-    dim == 3 && @assert(!any(x->x.nfacedofs > 1, interpolation_infos))
+    #dim == 3 && @assert(!any(x->x.nfacedofs > 1, interpolation_infos))
 
     nextdof = 1 # next free dof to distribute
     push!(dh.cell_dofs_offset, 1) # dofs for the first cell start at 1
 
     # loop over all the cells, and distribute dofs for all the fields
     #for (ci, cell) in enumerate(getcells(dh.grid))
-    for (ei, cellset) in enumerate(dh.elementcells)
-        tmp = sort(collect(cellset))
-        for ci in tmp#cellset 
+    for (element, cellset) in zip(dh.elements, dh.elementcells)
+        for ci in sort(collect(cellset))
             cell = dh.grid.cells[ci]
 
             @debug println("cell #$ci")
-            for field in dh.elements[ei].fields
+            for field in element.fields
                 fi = findfirst(i->i==field.name, unique_fields)
-                interpolation_info = InterpolationInfo(field.interpolation)#interpolation_infos[fi]
+                interpolation_info = InterpolationInfo(field.interpolation)
+                dim == 3 && @assert(!(interpolation_info.nfacedofs > 1))
 
                 @debug println("  field: $(field.name)")
                 if interpolation_info.nvertexdofs > 0

@@ -7,7 +7,11 @@ Field,
 push_element!,
 celltype,
 get_field,
+find_field,
+field_offset,
 get_bcvalue,
+faces,
+ScalarWrapper,
 
 # Interpolations
     Interpolation,
@@ -17,6 +21,9 @@ get_bcvalue,
     Serendipity,
     getnbasefunctions,
     getorder, 
+    getdim,
+    getrefshape,
+
 # Quadrature
     QuadratureRule,
     getweights,
