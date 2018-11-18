@@ -29,6 +29,10 @@ function Base.push!(el::Element, field::Field)
     push!(el.fields, field)
 end
 
+function Base.show(io::IO, el::Element)
+    println("Element $(typeof(el))")
+end
+
 function get_field(el::Element, field_name::Symbol)
     j = find_field(el, field_name)
     return j == nothing ? nothing : el.fields[j]
@@ -39,6 +43,7 @@ function get_bcvalue(el::Element, field_name::Symbol)
         return el.bcvalues[find_field(el, field_name)]
     else
         field = get_field(el,field_name)
+        
         return BCValues(field.interpolation, default_interpolation(celltype(el)))
     end
 end
@@ -79,7 +84,7 @@ struct DofHandler{dim,T}
     
     elements::Vector{Element}
     elementcells::Vector{Set{Int}}
-    cellmapper::Vector{Int} #not used yet...
+    cellmapper::Vector{Int} #cellid to elementtype
 
     cell_dofs::Vector{Int}
     cell_dofs_offset::Vector{Int}
@@ -152,7 +157,6 @@ function push_element!(dh::DofHandler, element::E, cellset::Set{Int}) where E<:E
     
     push!(dh.elements, element)
     push!(dh.elementcells, cellset)
-
     return dh
 end
 
@@ -174,7 +178,7 @@ end
 # close the DofHandler and distribute all the dofs
 function close!(dh::DofHandler{dim}) where {dim}
     @assert !isclosed(dh)
-
+    
     unique_fields = Vector{Symbol}()
     for element in dh.elements
         append!(unique_fields, [field.name for field in element.fields])
@@ -206,7 +210,7 @@ function close!(dh::DofHandler{dim}) where {dim}
 
     nextdof = 1 # next free dof to distribute
     push!(dh.cell_dofs_offset, 1) # dofs for the first cell start at 1
-
+    
     # loop over all the cells, and distribute dofs for all the fields
     #for (ci, cell) in enumerate(getcells(dh.grid))
     for (element, cellset) in zip(dh.elements, dh.elementcells)
@@ -273,6 +277,8 @@ function close!(dh::DofHandler{dim}) where {dim}
                 if interpolation_info.nfacedofs > 0 # nfacedofs(interpolation) > 0
                     for face in faces(cell)
                         sface = sortface(face) # TODO: faces(cell) may as well just return the sorted list
+                        @show sface
+                        error("Hej")
                         @debug println("    face#$sface")
                         token = Base.ht_keyindex2!(facedicts[fi], sface)
                         if token > 0 # haskey(facedicts[fi], sface), reuse dofs
@@ -312,8 +318,20 @@ function close!(dh::DofHandler{dim}) where {dim}
             push!(dh.cell_dofs_offset, length(dh.cell_dofs)+1)
         end
     end # cell loop
+
+    resize!(dh.cellmapper, getncells(dh.grid))
+    for (elementid, cellset) in enumerate(dh.elementcells)
+        for cellid in cellset
+            dh.cellmapper[cellid] = elementid#dh.elements[elementid]
+        end
+    end
+
     dh.closed[] = true
     return dh
+end
+
+function cellelement(dh::DofHandler, cellid::Int)
+    return dh.elements[dh.cellmapper[cellid]]
 end
 
 function celldofs!(global_dofs::Vector{Int}, dh::DofHandler, i::Int)

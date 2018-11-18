@@ -23,6 +23,8 @@ ScalarWrapper,
     getorder, 
     getdim,
     getrefshape,
+    getlowerdim,
+    getlowerorder,
 
 # Quadrature
     QuadratureRule,
@@ -105,6 +107,7 @@ ScalarWrapper,
     create_symmetric_sparsity_pattern,
     dof_range,
     renumber!,
+    cellelement,
 
 # Constraints
     ConstraintHandler,

@@ -50,6 +50,7 @@ A `FaceIndex` wraps an (Int, Int) and defines a face by pointing to a (cell, fac
 struct FaceIndex
     idx::Tuple{Int,Int} # cell and side
 end
+FaceIndex(cellid::Int, faceid::Int) = FaceIndex((cellid,faceid))
 Base.getindex(fi::FaceIndex, i::Int) = fi.idx[i]
 
 """

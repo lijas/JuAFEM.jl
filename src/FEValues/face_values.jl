@@ -218,7 +218,7 @@ end
 BCValues(func_interpol::Interpolation, geom_interpol::Interpolation, faces_or_vertex::F = JuAFEM.faces) where F =
     BCValues(Float64, func_interpol, geom_interpol, faces_or_vertex)
 
-function BCValues(::Type{T}, func_interpol::Interpolation{dim,refshape}, geom_interpol::Interpolation{dim,refshape}, faces_or_vertex::F = JuAFEM.faces) where {T,dim,refshape,F}
+function BCValues(::Type{T}, func_interpol::Interpolation{dim,refshape}, geom_interpol::Interpolation{dim,refshape}, faces_or_vertex::F) where {T,dim,refshape,F}
     # set up quadrature rules for each face with dof-positions
     # (determined by func_interpol) as the quadrature points
     interpolation_coords = reference_coordinates(func_interpol)

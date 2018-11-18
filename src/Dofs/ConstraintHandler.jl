@@ -45,6 +45,8 @@ function Dirichlet(field_name::Symbol, el::Element, faces::Union{Set{Int},Set{Tu
     unique(components) == components || error("components not unique: $components")
     # issorted(components) || error("components not sorted: $components")
     field = get_field(el, field_name)
+    @assert field != nothing
+
     return Dirichlet(f, faces, field_name, field.interpolation, field.dim, field_offset(el,field_name), get_bcvalue(el, field_name), components, Int[], Int[])
 end
 
@@ -156,17 +158,17 @@ function _add!(ch::ConstraintHandler, dbc::Dirichlet, bcfaces::Set{Tuple{Int,Int
 end
 
 function _add!(ch::ConstraintHandler, dbc::Dirichlet, bcnodes::Set{Int}, interpolation::Interpolation, field_dim::Int, offset::Int)
-    if interpolation !== default_interpolation(getcelltype(ch.dh.grid))
-        @warn("adding constraint to nodeset is not recommended for sub/super-parametric approximations.")
-    end
+    #if interpolation !== default_interpolation(getcelltype(ch.dh.grid))
+    #    @warn("adding constraint to nodeset is not recommended for sub/super-parametric approximations.")
+    #end
 
     ncomps = length(dbc.components)
     nnodes = getnnodes(ch.dh.grid)
     interpol_points = getnbasefunctions(interpolation)
-    _celldofs = fill(0, ndofs(ch.element))
     node_dofs = zeros(Int, ncomps, nnodes)
     visited = falses(nnodes)
     for (cellidx, cell) in enumerate(ch.dh.grid.cells)
+        _celldofs = fill(0, ndofs_per_cell(ch.dh, cellidx))
         celldofs!(_celldofs, ch.dh, cellidx) # update the dofs for this cell
         for idx in 1:min(interpol_points, length(cell.nodes))
             node = cell.nodes[idx]
@@ -193,7 +195,6 @@ function _add!(ch::ConstraintHandler, dbc::Dirichlet, bcnodes::Set{Int}, interpo
         end
         push!(dbc.local_face_dofs, node) # use this field to store the node idx for each node
     end
-
     # save it to the ConstraintHandler
     copy!!(dbc.local_face_dofs_offset, constrained_dofs) # use this field to store the global dofs
     push!(ch.dbcs, dbc)
@@ -216,7 +217,7 @@ function _update!(values::Vector{Float64}, f::Function, faces::Set{Tuple{Int,Int
                   dofmapping::Dict{Int,Int}, time::Float64) where {dim,T}
     grid = dh.grid
 
-    #Could probobly cache ndofs_per_cell and N in Dirichlet
+    #Could probobly store ndofs_per_cell and N in Dirichlet
     random_cell = first(faces)[1]
     N = length(grid.cells[random_cell].nodes)#nnodes(element)
     xh = zeros(Vec{dim, T}, N) # pre-allocate
