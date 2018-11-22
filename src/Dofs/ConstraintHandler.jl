@@ -38,10 +38,10 @@ struct Dirichlet{T} # <: Constraint
     local_face_dofs::Vector{Int}
     local_face_dofs_offset::Vector{Int}
 end
-function Dirichlet(field_name::Symbol, el::Element, faces::Union{Set{Int},Set{Tuple{Int,Int}}}, f::Function, component::Int=1)
+function Dirichlet(field_name::Symbol, el::AbstractElement, faces::Union{Set{Int},Set{Tuple{Int,Int}}}, f::Function, component::Int=1)
     Dirichlet(field_name, el, faces, f, [component])
 end
-function Dirichlet(field_name::Symbol, el::Element, faces::Union{Set{Int},Set{Tuple{Int,Int}}}, f::Function, components::Vector{Int})
+function Dirichlet(field_name::Symbol, el::AbstractElement, faces::Union{Set{Int},Set{Tuple{Int,Int}}}, f::Function, components::Vector{Int})
     unique(components) == components || error("components not unique: $components")
     # issorted(components) || error("components not sorted: $components")
     field = get_field(el, field_name)

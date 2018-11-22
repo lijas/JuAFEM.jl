@@ -44,10 +44,10 @@ struct CellIterator{dim,N,T,M}
 
 end
 
-function CellIterator(dh::DofHandler{dim,T}, element::Element, flags::UpdateFlags=UpdateFlags()) where {dim,T}
+function CellIterator(dh::DofHandler{dim,T}, element::AbstractElement, flags::UpdateFlags=UpdateFlags()) where {dim,T}
     CellIterator{dim,nnodes(element),T,nfaces(element)}(dh, collect(get_elementcells(dh, element)), flags)
 end
-function CellIterator(dh::DofHandler{dim,T}, element::Element, cellset::Vector{Int}, flags::UpdateFlags=UpdateFlags()) where {dim,T}
+function CellIterator(dh::DofHandler{dim,T}, element::AbstractElement, cellset::Vector{Int}, flags::UpdateFlags=UpdateFlags()) where {dim,T}
     CellIterator{dim,nnodes(element),T,nfaces(element)}(dh, cellset, flags)
 end
 
@@ -81,8 +81,11 @@ function reinit!(ci::CellIterator{dim,N}, i::Int) where {dim,N}
     @inbounds for j in 1:N
         nodeid = nodeids[j]
         ci.flags.nodes  && (ci.nodes[j] = nodeid)
-        ci.flags.coords && (ci.coords[j] = ci.grid.nodes[nodeid].x)
+        #ci.flags.coords && (ci.coords[j] = ci.grid.nodes[nodeid].x)
     end
+    
+    ci.flags.coords && cellcoords!(ci.coords, ci.dh, ci.current_cellid[])
+
     if isdefined(ci, :dh) && ci.flags.celldofs # update celldofs
         celldofs!(ci.celldofs, ci)
     end

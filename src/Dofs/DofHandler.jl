@@ -6,39 +6,39 @@ struct Field
     dim::Int
 end
 
-abstract type Element end
+abstract type AbstractElement end
 
-struct GenericElement{T} <: Element
+struct Element{T} <: AbstractElement
     name::Symbol
     fields::Vector{Field}
     bcvalues::Vector{BCValues{T}}
     celltype::Type{<:Cell}
 end
 
-function GenericElement(name::Symbol, celltype::Type{C}) where {C}
-    return GenericElement(Float64, name, celltype)
+function Element(name::Symbol, celltype::Type{C}) where {C}
+    return Element(Float64, name, celltype)
 end
 
-function GenericElement(::Type{T}, name::Symbol, celltype::Type{C}) where {C,T}
-    return GenericElement(name, Field[], BCValues{T}[], celltype)
+function Element(::Type{T}, name::Symbol, celltype::Type{C}) where {C,T}
+    return Element(name, Field[], BCValues{T}[], celltype)
 end
 
-function Base.push!(el::Element, field::Field)
+function Base.push!(el::AbstractElement, field::Field)
     #checkstuff
     push!(el.bcvalues, BCValues(field.interpolation, default_interpolation(el.celltype)))
     push!(el.fields, field)
 end
 
-function Base.show(io::IO, el::Element)
-    println("Element $(typeof(el))")
+function Base.show(io::IO, el::AbstractElement)
+    println("AbstractElement $(typeof(el))")
 end
 
-function get_field(el::Element, field_name::Symbol)
+function get_field(el::AbstractElement, field_name::Symbol)
     j = find_field(el, field_name)
     return j == nothing ? nothing : el.fields[j]
 end
 
-function get_bcvalue(el::Element, field_name::Symbol)
+function get_bcvalue(el::AbstractElement, field_name::Symbol)
     if isdefined(el, :bcvalues)
         return el.bcvalues[find_field(el, field_name)]
     else
@@ -48,13 +48,13 @@ function get_bcvalue(el::Element, field_name::Symbol)
     end
 end
 
-function find_field(el::Element, field_name::Symbol)
+function find_field(el::AbstractElement, field_name::Symbol)
     j = findfirst(i->i.name == field_name, el.fields)
     j == 0 && error("did not find field $field_name")
     return j
 end
 
-function field_offset(el::Element, field_name::Symbol)
+function field_offset(el::AbstractElement, field_name::Symbol)
     offset = 0
     for i in 1:find_field(el, field_name)-1
         field = el.fields[i]
@@ -63,17 +63,17 @@ function field_offset(el::Element, field_name::Symbol)
     return offset
 end
 
-function dof_range(element::Element, field_name::Symbol)
+function dof_range(element::AbstractElement, field_name::Symbol)
     f = find_field(element, field_name)
     offset = field_offset(element, field_name)
     n_field_dofs = getnbasefunctions(element.fields[f].interpolation)::Int * element.fields[f].dim
     return (offset+1):(offset+n_field_dofs)
 end
 
-ndofs(el::Element) = sum([getnbasefunctions(field.interpolation)::Int * field.dim for field in el.fields])
-nnodes(el::Element) = nnodes(el.celltype)
-nfaces(el::Element) = nfaces(el.celltype)
-celltype(el::Element) = el.celltype
+ndofs(el::AbstractElement) = sum([getnbasefunctions(field.interpolation)::Int * field.dim for field in el.fields])
+nnodes(el::AbstractElement) = nnodes(el.celltype)
+nfaces(el::AbstractElement) = nfaces(el.celltype)
+celltype(el::AbstractElement) = el.celltype
 
 """
     DofHandler(grid::Grid)
@@ -82,18 +82,25 @@ Construct a `DofHandler` based on the grid `grid`.
 """
 struct DofHandler{dim,T}
     
-    elements::Vector{Element}
+    elements::Vector{AbstractElement}
     elementcells::Vector{Set{Int}}
     cellmapper::Vector{Int} #cellid to elementtype
 
     cell_dofs::Vector{Int}
     cell_dofs_offset::Vector{Int}
+
+    #cell_nodes::Vector{Int}
+    #cell_dofs_offset::Vector{Int}
+
+    cell_coords::Vector{Vec{dim,T}}
+    cell_coords_offset::Vector{Int}
+
     closed::ScalarWrapper{Bool}
     grid::Grid{dim,T}
 end
 
-function DofHandler(grid::Grid)
-    DofHandler(Element[], Set{Int}[], Int[], Int[], Int[], ScalarWrapper(false), grid)
+function DofHandler(grid::Grid{dim,T}) where {dim,T}
+    DofHandler(AbstractElement[], Set{Int}[], Int[], Int[], Int[], Vec{dim,T}[], Int[], ScalarWrapper(false), grid)
 end
 
 function Base.show(io::IO, dh::DofHandler)
@@ -116,12 +123,13 @@ end
 #       How often do you actually call ndofs though...
 ndofs(dh::DofHandler) = maximum(dh.cell_dofs)
 ndofs_per_cell(dh::DofHandler, cell::Int=1) = dh.cell_dofs_offset[cell+1] - dh.cell_dofs_offset[cell]
+nnodes_per_cell(dh::DofHandler, cell::Int=1) = dh.cell_coords_offset[cell+1] - dh.cell_coords_offset[cell]
 isclosed(dh::DofHandler) = dh.closed[]
 ndim(dh::DofHandler, field_name::Symbol) = dh.field_dims[find_field(dh, field_name)]
 
 
 # Calculate the offset to the first local dof of a field
-function get_elementcells(dh::DofHandler, element::Element)
+function get_elementcells(dh::DofHandler, element::AbstractElement)
     j = findfirst(i->i == element, dh.elements)
     j == 0 && error("...")
     return dh.elementcells[j]
@@ -152,9 +160,12 @@ function dof_range(dh::DofHandler, field_name::Symbol)
 end
 
 #function Base.push!
-function push_element!(dh::DofHandler, element::E, cellset::Set{Int}) where E<:Element
+function push_element!(dh::DofHandler, element::E, cellset::Set{Int}) where E<:AbstractElement
     @assert !isclosed(dh)
-    
+    @assert isdefined(element, :fields)
+    @assert isdefined(element, :celltype)
+    #@assert isdefined(element, :bcvalues)
+
     push!(dh.elements, element)
     push!(dh.elementcells, cellset)
     return dh
@@ -319,11 +330,21 @@ function close!(dh::DofHandler{dim}) where {dim}
         end
     end # cell loop
 
+    #Create mapper cellid -> elementtype id
     resize!(dh.cellmapper, getncells(dh.grid))
     for (elementid, cellset) in enumerate(dh.elementcells)
         for cellid in cellset
             dh.cellmapper[cellid] = elementid#dh.elements[elementid]
         end
+    end
+
+    #Create coords vector
+    push!(dh.cell_coords_offset, 1)
+    for cell in dh.grid.cells
+        for nodeid in cell.nodes
+            push!(dh.cell_coords, dh.grid.nodes[nodeid].x)
+        end
+        push!(dh.cell_coords_offset, length(dh.cell_coords)+1)
     end
 
     dh.closed[] = true
@@ -332,6 +353,13 @@ end
 
 function cellelement(dh::DofHandler, cellid::Int)
     return dh.elements[dh.cellmapper[cellid]]
+end
+
+function cellcoords!(coords::Vector{Vec{dim,T}}, dh::DofHandler{dim,T}, i::Int) where {dim,T}
+    @assert isclosed(dh)
+    @assert length(coords) == nnodes_per_cell(dh, i)
+    unsafe_copyto!(coords, 1, dh.cell_coords, dh.cell_coords_offset[i], length(coords))
+    return coords
 end
 
 function celldofs!(global_dofs::Vector{Int}, dh::DofHandler, i::Int)
