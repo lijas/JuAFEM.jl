@@ -89,8 +89,8 @@ struct DofHandler{dim,T}
     cell_dofs::Vector{Int}
     cell_dofs_offset::Vector{Int}
 
-    #cell_nodes::Vector{Int}
-    #cell_dofs_offset::Vector{Int}
+    cell_nodes::Vector{Int}
+    cell_nodes_offset::Vector{Int}
 
     cell_coords::Vector{Vec{dim,T}}
     cell_coords_offset::Vector{Int}
@@ -100,7 +100,7 @@ struct DofHandler{dim,T}
 end
 
 function DofHandler(grid::Grid{dim,T}) where {dim,T}
-    DofHandler(AbstractElement[], Set{Int}[], Int[], Int[], Int[], Vec{dim,T}[], Int[], ScalarWrapper(false), grid)
+    DofHandler(AbstractElement[], Set{Int}[], Int[], Int[], Int[], Int[], Int[], Vec{dim,T}[], Int[], ScalarWrapper(false), grid)
 end
 
 function Base.show(io::IO, dh::DofHandler)
@@ -220,16 +220,35 @@ function close!(dh::DofHandler{dim}) where {dim}
     #dim == 3 && @assert(!any(x->x.nfacedofs > 1, interpolation_infos))
 
     nextdof = 1 # next free dof to distribute
+
+    #Create mapper cellid -> elementtype id
+    resize!(dh.cellmapper, getncells(dh.grid))
+    for (elementid, cellset) in enumerate(dh.elementcells)
+        for cellid in cellset
+            dh.cellmapper[cellid] = elementid#dh.elements[elementid]
+        end
+    end
+
+    # Calculate cell_dofs_offset beforehand because we no longer loop over the 
+    # cells in order (1,2,3,4...)
     push!(dh.cell_dofs_offset, 1) # dofs for the first cell start at 1
+    for cellid in 1:getncells(dh.grid)
+        element = cellelement(dh, cellid)
+        push!(dh.cell_dofs_offset, dh.cell_dofs_offset[cellid]+JuAFEM.ndofs(element))
+    end
     
+    celldofs_length = sum([JuAFEM.ndofs(e)*length(ec) for (e,ec) in zip(dh.elements, dh.elementcells)])
+    resize!(dh.cell_dofs, celldofs_length)
     # loop over all the cells, and distribute dofs for all the fields
     #for (ci, cell) in enumerate(getcells(dh.grid))
     for (element, cellset) in zip(dh.elements, dh.elementcells)
         for ci in sort(collect(cellset))
             cell = dh.grid.cells[ci]
 
+            celldof_counter = dh.cell_dofs_offset[ci]
             @debug println("cell #$ci")
             for field in element.fields
+
                 fi = findfirst(i->i==field.name, unique_fields)
                 interpolation_info = InterpolationInfo(field.interpolation)
                 dim == 3 && @assert(!(interpolation_info.nfacedofs > 1))
@@ -239,18 +258,23 @@ function close!(dh::DofHandler{dim}) where {dim}
                     for vertex in vertices(cell)
                         @debug println("    vertex#$vertex")
                         token = Base.ht_keyindex2!(vertexdicts[fi], vertex)
+                        
                         if token > 0 # haskey(vertexdicts[fi], vertex) # reuse dofs
                             reuse_dof = vertexdicts[fi].vals[token] # vertexdicts[fi][vertex]
                             for d in 1:field.dim
                                 @debug println("      reusing dof #$(reuse_dof + (d-1))")
-                                push!(dh.cell_dofs, reuse_dof + (d-1))
+                                dh.cell_dofs[celldof_counter] = reuse_dof + (d-1)
+                                celldof_counter+=1
+                                #push!(dh.cell_dofs, reuse_dof + (d-1))
                             end
                         else # token <= 0, distribute new dofs
                             for vertexdof in 1:interpolation_info.nvertexdofs
                                 Base._setindex!(vertexdicts[fi], nextdof, vertex, -token) # vertexdicts[fi][vertex] = nextdof
                                 for d in 1:field.dim
                                     @debug println("      adding dof#$nextdof")
-                                    push!(dh.cell_dofs, nextdof)
+                                    dh.cell_dofs[celldof_counter] = nextdof
+                                    celldof_counter+=1
+                                    #push!(dh.cell_dofs, nextdof)
                                     nextdof += 1
                                 end
                             end
@@ -269,7 +293,9 @@ function close!(dh::DofHandler{dim}) where {dim}
                                     for d in 1:field.dim
                                         reuse_dof = startdof + (d-1) + (edgedof-1)*field.dim
                                         @debug println("      reusing dof#$(reuse_dof)")
-                                        push!(dh.cell_dofs, reuse_dof)
+                                        dh.cell_dofs[celldof_counter] = reuse_dof
+                                        celldof_counter+=1
+                                        #push!(dh.cell_dofs, reuse_dof)
                                     end
                                 end
                             else # token <= 0, distribute new dofs
@@ -277,7 +303,9 @@ function close!(dh::DofHandler{dim}) where {dim}
                                 for edgedof in 1:interpolation_info.nedgedofs
                                     for d in 1:field.dim
                                         @debug println("      adding dof#$nextdof")
-                                        push!(dh.cell_dofs, nextdof)
+                                        dh.cell_dofs[celldof_counter] = nextdof
+                                        celldof_counter+=1
+                                        #push!(dh.cell_dofs, nextdof)
                                         nextdof += 1
                                     end
                                 end
@@ -288,8 +316,6 @@ function close!(dh::DofHandler{dim}) where {dim}
                 if interpolation_info.nfacedofs > 0 # nfacedofs(interpolation) > 0
                     for face in faces(cell)
                         sface = sortface(face) # TODO: faces(cell) may as well just return the sorted list
-                        @show sface
-                        error("Hej")
                         @debug println("    face#$sface")
                         token = Base.ht_keyindex2!(facedicts[fi], sface)
                         if token > 0 # haskey(facedicts[fi], sface), reuse dofs
@@ -298,7 +324,9 @@ function close!(dh::DofHandler{dim}) where {dim}
                                 for d in 1:field.dim
                                     reuse_dof = startdof + (d-1) + (facedof-1)*field.dim
                                     @debug println("      reusing dof#$(reuse_dof)")
-                                    push!(dh.cell_dofs, reuse_dof)
+                                    dh.cell_dofs[celldof_counter] = reuse_dof
+                                    celldof_counter+=1
+                                    #push!(dh.cell_dofs, reuse_dof)
                                 end
                             end
                         else # distribute new dofs
@@ -306,7 +334,9 @@ function close!(dh::DofHandler{dim}) where {dim}
                             for facedof in 1:interpolation_info.nfacedofs
                                 for d in 1:field.dim
                                     @debug println("      adding dof#$nextdof")
-                                    push!(dh.cell_dofs, nextdof)
+                                    dh.cell_dofs[celldof_counter] = nextdof
+                                    celldof_counter+=1
+                                    #push!(dh.cell_dofs, nextdof)
                                     nextdof += 1
                                 end
                             end
@@ -318,32 +348,28 @@ function close!(dh::DofHandler{dim}) where {dim}
                     for celldof in 1:interpolation_info.ncelldofs
                         for d in 1:field.dim
                             @debug println("      adding dof#$nextdof")
-                            push!(dh.cell_dofs, nextdof)
+                            dh.cell_dofs[celldof_counter] = nextdof
+                            celldof_counter+=1
+                            #push!(dh.cell_dofs, nextdof)
                             nextdof += 1
                         end
                     end # cell loop
                 end
             end # field loop
-
             # push! the first index of the next cell to the offset vector
-            push!(dh.cell_dofs_offset, length(dh.cell_dofs)+1)
+            #push!(dh.cell_dofs_offset, length(dh.cell_dofs)+1)
         end
     end # cell loop
 
-    #Create mapper cellid -> elementtype id
-    resize!(dh.cellmapper, getncells(dh.grid))
-    for (elementid, cellset) in enumerate(dh.elementcells)
-        for cellid in cellset
-            dh.cellmapper[cellid] = elementid#dh.elements[elementid]
-        end
-    end
-
     #Create coords vector
     push!(dh.cell_coords_offset, 1)
+    push!(dh.cell_nodes_offset, 1)
     for cell in dh.grid.cells
         for nodeid in cell.nodes
+            push!(dh.cell_nodes, nodeid)
             push!(dh.cell_coords, dh.grid.nodes[nodeid].x)
         end
+        push!(dh.cell_nodes_offset, length(dh.cell_nodes)+1)
         push!(dh.cell_coords_offset, length(dh.cell_coords)+1)
     end
 
@@ -353,6 +379,13 @@ end
 
 function cellelement(dh::DofHandler, cellid::Int)
     return dh.elements[dh.cellmapper[cellid]]
+end
+
+function cellnodes!(nodes::Vector{Int}, dh::DofHandler{dim,T}, i::Int) where {dim,T}
+    @assert isclosed(dh)
+    @assert length(nodes) == nnodes_per_cell(dh, i)
+    unsafe_copyto!(nodes, 1, dh.cell_nodes, dh.cell_nodes_offset[i], length(nodes))
+    return nodes
 end
 
 function cellcoords!(coords::Vector{Vec{dim,T}}, dh::DofHandler{dim,T}, i::Int) where {dim,T}

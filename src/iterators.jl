@@ -23,7 +23,7 @@ for cell in CellIterator(grid)
 end
 ```
 """
-struct CellIterator{dim,N,T,M}
+struct CellIterator{dim,T}
     flags::UpdateFlags
     grid::Grid{dim,T}
     current_cellid::ScalarWrapper{Int}
@@ -33,22 +33,23 @@ struct CellIterator{dim,N,T,M}
     celldofs::Vector{Int}
     cellset::Vector{Int}
 
-    function CellIterator{dim,N,T,M}(dh::DofHandler{dim,T}, cellset::Vector{Int}, flags::UpdateFlags) where {dim,N,T,M}
+    function CellIterator{dim,T}(dh::DofHandler{dim,T}, cellset::Vector{Int}, flags::UpdateFlags) where {dim,T}
+        N = nnodes_per_cell(dh, first(cellset))
         cell = ScalarWrapper(0)
         nodes = zeros(Int, N)
         coords = zeros(Vec{dim,T}, N)
         n = ndofs_per_cell(dh, first(cellset))
         celldofs = zeros(Int, n)
-        return new{dim,N,T,M}(flags, dh.grid, cell, nodes, coords, dh, celldofs, cellset)
+        return new{dim,T}(flags, dh.grid, cell, nodes, coords, dh, celldofs, cellset)
     end
 
 end
 
 function CellIterator(dh::DofHandler{dim,T}, element::AbstractElement, flags::UpdateFlags=UpdateFlags()) where {dim,T}
-    CellIterator{dim,nnodes(element),T,nfaces(element)}(dh, collect(get_elementcells(dh, element)), flags)
+    return CellIterator{dim,T}(dh, collect(get_elementcells(dh, element)), flags)
 end
 function CellIterator(dh::DofHandler{dim,T}, element::AbstractElement, cellset::Vector{Int}, flags::UpdateFlags=UpdateFlags()) where {dim,T}
-    CellIterator{dim,nnodes(element),T,nfaces(element)}(dh, cellset, flags)
+    return CellIterator{dim,T}(dh, cellset, flags)
 end
 
 # iterator interface
@@ -74,23 +75,15 @@ Base.eltype(::Type{T})         where {T<:CellIterator} = T
 @inline celldofs!(v::Vector, ci::CellIterator) = celldofs!(v, ci.dh, ci.current_cellid[])
 @inline celldofs(ci::CellIterator) = ci.celldofs
 
-function reinit!(ci::CellIterator{dim,N}, i::Int) where {dim,N}
+function reinit!(ci::CellIterator{dim}, i::Int) where {dim}
     ci.current_cellid[] = ci.cellset[i]
-    nodeids = ci.grid.cells[ci.current_cellid[]].nodes
-
-    @inbounds for j in 1:N
-        nodeid = nodeids[j]
-        ci.flags.nodes  && (ci.nodes[j] = nodeid)
-        #ci.flags.coords && (ci.coords[j] = ci.grid.nodes[nodeid].x)
-    end
     
+    ci.flags.nodes  && cellnodes!(ci.nodes, ci.dh, ci.current_cellid[])
     ci.flags.coords && cellcoords!(ci.coords, ci.dh, ci.current_cellid[])
+    ci.flags.celldofs && celldofs!(ci.celldofs, ci)
 
-    if isdefined(ci, :dh) && ci.flags.celldofs # update celldofs
-        celldofs!(ci.celldofs, ci)
-    end
     return ci
 end
 
-@inline reinit!(cv::CellValues{dim,T}, ci::CellIterator{dim,N,T}) where {dim,N,T} = reinit!(cv, ci.coords)
-@inline reinit!(fv::FaceValues{dim,T}, ci::CellIterator{dim,N,T}, face::Int) where {dim,N,T} = reinit!(fv, ci.coords, face)
+@inline reinit!(cv::CellValues{dim,T}, ci::CellIterator{dim,T}) where {dim,T} = reinit!(cv, ci.coords)
+@inline reinit!(fv::FaceValues{dim,T}, ci::CellIterator{dim,T}, face::Int) where {dim,T} = reinit!(fv, ci.coords, face)

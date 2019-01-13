@@ -1,5 +1,6 @@
 cell_to_vtkcell(::Type{Cell{dim,1,M}}) where {dim, M} = VTKCellTypes.VTK_VERTEX
 cell_to_vtkcell(::Type{Line}) = VTKCellTypes.VTK_LINE
+cell_to_vtkcell(::Type{Cell{2,2,2}}) = VTKCellTypes.VTK_LINE
 cell_to_vtkcell(::Type{QuadraticLine}) = VTKCellTypes.VTK_QUADRATIC_EDGE
 
 cell_to_vtkcell(::Type{Quadrilateral}) = VTKCellTypes.VTK_QUAD

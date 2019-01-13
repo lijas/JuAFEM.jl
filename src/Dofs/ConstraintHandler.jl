@@ -26,28 +26,22 @@ dbc = Dirichlet(:u, ∂Ω, (x, t) -> sin(t), [1, 3]) # applied to component 1 an
 `Dirichlet` boundary conditions are added to a [`ConstraintHandler`](@ref)
 which applies the condition via `apply!`.
 """
-struct Dirichlet{T} # <: Constraint
+struct Dirichlet # <: Constraint
     f::Function # f(x,t) -> value
     faces::Union{Set{Int},Set{Tuple{Int,Int}}}
     field_name::Symbol
-    field_interpolation::Interpolation
-    field_dim::Int
-    field_offset::Int
-    bcvalues::BCValues{T}
     components::Vector{Int} # components of the field
     local_face_dofs::Vector{Int}
     local_face_dofs_offset::Vector{Int}
 end
-function Dirichlet(field_name::Symbol, el::AbstractElement, faces::Union{Set{Int},Set{Tuple{Int,Int}}}, f::Function, component::Int=1)
-    Dirichlet(field_name, el, faces, f, [component])
+function Dirichlet(field_name::Symbol, faces::Union{Set{Int},Set{Tuple{Int,Int}}}, f::Function, component::Int=1)
+    Dirichlet(field_name, faces, f, [component])
 end
-function Dirichlet(field_name::Symbol, el::AbstractElement, faces::Union{Set{Int},Set{Tuple{Int,Int}}}, f::Function, components::Vector{Int})
+function Dirichlet(field_name::Symbol, faces::Union{Set{Int},Set{Tuple{Int,Int}}}, f::Function, components::Vector{Int})
     unique(components) == components || error("components not unique: $components")
-    # issorted(components) || error("components not sorted: $components")
-    field = get_field(el, field_name)
-    @assert field != nothing
+    issorted(components) || error("components not sorted: $components")
 
-    return Dirichlet(f, faces, field_name, field.interpolation, field.dim, field_offset(el,field_name), get_bcvalue(el, field_name), components, Int[], Int[])
+    return Dirichlet(f, faces, field_name, components, Int[], Int[])
 end
 
 """
@@ -61,13 +55,14 @@ struct ConstraintHandler{DH<:DofHandler,T}
     free_dofs::Vector{Int}
     values::Vector{T}
     dofmapping::Dict{Int,Int} # global dof -> index into dofs and values
+    bcvalues::Vector{BCValues{T}}
     dh::DH
     closed::ScalarWrapper{Bool}
 end
 
-function ConstraintHandler(dh::DofHandler)
+function ConstraintHandler(dh::DofHandler{DH,T}) where {DH,T}
     @assert isclosed(dh)
-    ConstraintHandler(Dirichlet[], Int[], Int[], Float64[], Dict{Int,Int}(), dh, ScalarWrapper(false))
+    ConstraintHandler(Dirichlet[], Int[], Int[], Float64[], Dict{Int,Int}(), BCValues{T}[], dh, ScalarWrapper(false))
 end
 
 function Base.show(io::IO, ch::ConstraintHandler)
@@ -122,11 +117,16 @@ Add a `Dirichlet boundary` condition to the `ConstraintHandler`.
 """
 function add!(ch::ConstraintHandler, dbc::Dirichlet)
     #dbc_check(ch, dbc)
-    _add!(ch, dbc, dbc.faces, dbc.field_interpolation, dbc.field_dim, dbc.field_offset)
+    random_cellid = first(dbc.faces)[1] #does not work for nodes
+    element = cellelement(ch.dh,random_cellid)
+    field = get_field(element, dbc.field_name)
+    bcvalue = get_bcvalue(element, dbc.field_name)
+
+    _add!(ch, dbc, dbc.faces, field.interpolation, field.dim, field_offset(element,dbc.field_name), bcvalue)
     return ch
 end
 
-function _add!(ch::ConstraintHandler, dbc::Dirichlet, bcfaces::Set{Tuple{Int,Int}}, interpolation::Interpolation, field_dim::Int, offset::Int)
+function _add!(ch::ConstraintHandler, dbc::Dirichlet, bcfaces::Set{Tuple{Int,Int}}, interpolation::Interpolation, field_dim::Int, offset::Int, bcvalue::BCValues)
     # calculate which local dof index live on each face
     # face `i` have dofs `local_face_dofs[local_face_dofs_offset[i]:local_face_dofs_offset[i+1]-1]
     local_face_dofs = Int[]
@@ -155,20 +155,21 @@ function _add!(ch::ConstraintHandler, dbc::Dirichlet, bcfaces::Set{Tuple{Int,Int
     # save it to the ConstraintHandler
     push!(ch.dbcs, dbc)
     append!(ch.prescribed_dofs, constrained_dofs)
+    push!(ch.bcvalues, bcvalue)
 end
 
 function _add!(ch::ConstraintHandler, dbc::Dirichlet, bcnodes::Set{Int}, interpolation::Interpolation, field_dim::Int, offset::Int)
-    #if interpolation !== default_interpolation(getcelltype(ch.dh.grid))
-    #    @warn("adding constraint to nodeset is not recommended for sub/super-parametric approximations.")
-    #end
+    if interpolation !== default_interpolation(getcelltype(ch.dh.grid))
+        @warn("adding constraint to nodeset is not recommended for sub/super-parametric approximations.")
+    end
 
     ncomps = length(dbc.components)
     nnodes = getnnodes(ch.dh.grid)
     interpol_points = getnbasefunctions(interpolation)
+    _celldofs = fill(0, ndofs(ch.element))
     node_dofs = zeros(Int, ncomps, nnodes)
     visited = falses(nnodes)
     for (cellidx, cell) in enumerate(ch.dh.grid.cells)
-        _celldofs = fill(0, ndofs_per_cell(ch.dh, cellidx))
         celldofs!(_celldofs, ch.dh, cellidx) # update the dofs for this cell
         for idx in 1:min(interpol_points, length(cell.nodes))
             node = cell.nodes[idx]
@@ -195,6 +196,7 @@ function _add!(ch::ConstraintHandler, dbc::Dirichlet, bcnodes::Set{Int}, interpo
         end
         push!(dbc.local_face_dofs, node) # use this field to store the node idx for each node
     end
+
     # save it to the ConstraintHandler
     copy!!(dbc.local_face_dofs_offset, constrained_dofs) # use this field to store the global dofs
     push!(ch.dbcs, dbc)
@@ -204,10 +206,10 @@ end
 # Updates the DBC's to the current time `time`
 function update!(ch::ConstraintHandler, time::Float64=0.0)
     @assert ch.closed[]
-    for dbc in ch.dbcs
+    for (i,dbc) in enumerate(ch.dbcs)
         # Function barrier
         _update!(ch.values, dbc.f, dbc.faces, dbc.field_name, dbc.local_face_dofs, dbc.local_face_dofs_offset,
-                 dbc.components, ch.dh, dbc.bcvalues, ch.dofmapping, time)
+                 dbc.components, ch.dh, ch.bcvalues[i], ch.dofmapping, time)
     end
 end
 
@@ -217,7 +219,7 @@ function _update!(values::Vector{Float64}, f::Function, faces::Set{Tuple{Int,Int
                   dofmapping::Dict{Int,Int}, time::Float64) where {dim,T}
     grid = dh.grid
 
-    #Could probobly store ndofs_per_cell and N in Dirichlet
+    #Could probobly cache ndofs_per_cell and N in Dirichlet
     random_cell = first(faces)[1]
     N = length(grid.cells[random_cell].nodes)#nnodes(element)
     xh = zeros(Vec{dim, T}, N) # pre-allocate
