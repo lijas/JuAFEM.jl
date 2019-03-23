@@ -58,7 +58,7 @@ function field_offset(el::AbstractElement, field_name::Symbol)
     offset = 0
     for i in 1:find_field(el, field_name)-1
         field = el.fields[i]
-        offset += getnbasefunctions(field.interpolation)::Int * field.dims
+        offset += getnbasefunctions(field.interpolation)::Int * field.dim
     end
     return offset
 end
