@@ -126,12 +126,25 @@ function add!(ch::ConstraintHandler, dbc::Dirichlet)
     return ch
 end
 
-function _add!(ch::ConstraintHandler, dbc::Dirichlet, bcfaces::Set{Tuple{Int,Int}}, interpolation::Interpolation, field_dim::Int, offset::Int, bcvalue::BCValues)
+function add_vertex!(ch::ConstraintHandler, dbc::Dirichlet)
+    #dbc_check(ch, dbc)
+    random_cellid = first(dbc.faces)[1] #does not work for nodes
+    element = cellelement(ch.dh,random_cellid)
+    field = get_field(element, dbc.field_name)
+    bcvalue = get_bcvalue(element, dbc.field_name)
+
+    _add!(ch, dbc, dbc.faces, field.interpolation, field.dim, field_offset(element,dbc.field_name), bcvalue, vertices)
+    return ch
+end
+
+
+function _add!(ch::ConstraintHandler, dbc::Dirichlet, bcfaces::Set{Tuple{Int,Int}}, interpolation::Interpolation, field_dim::Int, offset::Int, bcvalue::BCValues, faces_or_vertices=faces)
     # calculate which local dof index live on each face
     # face `i` have dofs `local_face_dofs[local_face_dofs_offset[i]:local_face_dofs_offset[i+1]-1]
+
     local_face_dofs = Int[]
     local_face_dofs_offset = Int[1]
-    for (i, face) in enumerate(faces(interpolation))
+    for (i, face) in enumerate(faces_or_vertices(interpolation))
         for fdof in face, d in 1:field_dim
             if d ∈ dbc.components # skip unless this component should be constrained
                 push!(local_face_dofs, (fdof-1)*field_dim + d + offset)
