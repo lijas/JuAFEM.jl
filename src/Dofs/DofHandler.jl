@@ -38,13 +38,13 @@ function get_field(el::AbstractElement, field_name::Symbol)
     return j == nothing ? nothing : el.fields[j]
 end
 
-function get_bcvalue(el::AbstractElement, field_name::Symbol)
+function get_bcvalue(el::AbstractElement, field_name::Symbol, faces_or_vertex=faces)
     if isdefined(el, :bcvalues)
         return el.bcvalues[find_field(el, field_name)]
     else
         field = get_field(el,field_name)
         
-        return BCValues(field.interpolation, default_interpolation(celltype(el)))
+        return BCValues(field.interpolation, default_interpolation(celltype(el)), faces_or_vertex)
     end
 end
 

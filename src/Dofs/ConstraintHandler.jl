@@ -131,7 +131,7 @@ function add_vertex!(ch::ConstraintHandler, dbc::Dirichlet)
     random_cellid = first(dbc.faces)[1] #does not work for nodes
     element = cellelement(ch.dh,random_cellid)
     field = get_field(element, dbc.field_name)
-    bcvalue = get_bcvalue(element, dbc.field_name)
+    bcvalue = get_bcvalue(element, dbc.field_name, vertices)
 
     _add!(ch, dbc, dbc.faces, field.interpolation, field.dim, field_offset(element,dbc.field_name), bcvalue, vertices)
     return ch
