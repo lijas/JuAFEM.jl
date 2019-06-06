@@ -53,6 +53,14 @@ end
 FaceIndex(cellid::Int, faceid::Int) = FaceIndex((cellid,faceid))
 Base.getindex(fi::FaceIndex, i::Int) = fi.idx[i]
 
+struct EdgeIndex
+    idx::Tuple{Int,Int} # cell and side
+end
+
+struct VertexIndex
+    idx::Tuple{Int,Int} # cell and side
+end
+
 """
 A `Grid` is a collection of `Cells` and `Node`s which covers the computational domain, together with Sets of cells, nodes and faces.
 """
