@@ -248,13 +248,12 @@ function generate_grid(::Type{Cell{3,4,2}}, nel::NTuple{3,Int}, left::Vec{3,T}=V
     # Generate nodes
     coords_x = range(left[1], stop=right[1], length=n_nodes_x)
     coords_y = range(left[2], stop=right[2], length=n_nodes_y)
-    coords_z = range(left[3], stop=right[3], length=2)
 
     @assert left[3] == right[3]
 
     nodes = Node{3,T}[]
-    for k in 1:n_nodes_z, j in 1:n_nodes_y, i in 1:n_nodes_x
-        push!(nodes, Node((coords_x[i], coords_y[j], coords_z[k])))
+    for j in 1:n_nodes_y, i in 1:n_nodes_x
+        push!(nodes, Node((coords_x[i], coords_y[j], left[3])))
     end
 
     # Generate cells
