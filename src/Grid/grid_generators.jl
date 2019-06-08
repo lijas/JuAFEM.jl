@@ -240,7 +240,7 @@ function generate_grid(::Type{Hexahedron}, nel::NTuple{3,Int}, left::Vec{3,T}=Ve
 end
 
 # Shell
-function generate_grid(::Type{Cell{3,4,2}}, nel::NTuple{3,Int}, left::Vec{3,T}=Vec{3}((-1.0,-1.0,-1.0)), right::Vec{3,T}=Vec{3}((1.0,1.0,1.0))) where {T}
+function generate_grid(::Type{Cell{3,4,2}}, nel::NTuple{2,Int}, left::Vec{3,T}=Vec{3}((-1.0,-1.0,-1.0)), right::Vec{3,T}=Vec{3}((1.0,1.0,1.0))) where {T}
     nel_x = nel[1]; nel_y = nel[2]; nel_tot = nel_x*nel_y
     n_nodes_x = nel_x + 1; n_nodes_y = nel_y + 1;
     n_nodes = n_nodes_x * n_nodes_y
