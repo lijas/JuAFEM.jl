@@ -37,6 +37,9 @@ const QuadraticTetrahedron = Cell{3,10,4}
 const Hexahedron = Cell{3,8,6}
 const QuadraticHexahedron = Cell{3,20,6} # Function interpolation for this doesn't exist in JuAFEM yet
 
+const QuadShell = Cell{3,4,2}
+const TriaShell = Cell{3,3,2}
+
 """
 A `CellIndex` wraps an Int and corresponds to a cell with that number in the mesh
 """
@@ -327,6 +330,9 @@ faces(c::Union{Tetrahedron,QuadraticTetrahedron}) = ((c.nodes[1],c.nodes[2],c.no
 vertices(c::Union{Hexahedron,QuadraticHexahedron}) = (c.nodes[1], c.nodes[2], c.nodes[3], c.nodes[4], c.nodes[5], c.nodes[6], c.nodes[7], c.nodes[8])
 edges(c::Union{Hexahedron,QuadraticHexahedron}) = ((c.nodes[1],c.nodes[2]), (c.nodes[2],c.nodes[3]), (c.nodes[3],c.nodes[4]), (c.nodes[4],c.nodes[1]), (c.nodes[1],c.nodes[5]), (c.nodes[2],c.nodes[6]), (c.nodes[3],c.nodes[7]), (c.nodes[4],c.nodes[8]), (c.nodes[5],c.nodes[6]), (c.nodes[6],c.nodes[7]), (c.nodes[7],c.nodes[8]), (c.nodes[8],c.nodes[5]))
 faces(c::Union{Hexahedron,QuadraticHexahedron}) = ((c.nodes[1],c.nodes[4],c.nodes[3],c.nodes[2]), (c.nodes[1],c.nodes[2],c.nodes[6],c.nodes[5]), (c.nodes[2],c.nodes[3],c.nodes[7],c.nodes[6]), (c.nodes[3],c.nodes[4],c.nodes[8],c.nodes[7]), (c.nodes[1],c.nodes[5],c.nodes[8],c.nodes[4]), (c.nodes[5],c.nodes[6],c.nodes[7],c.nodes[8]))
+
+vertices(c::QuadShell) = (c.nodes[1], c.nodes[2], c.nodes[3], c.nodes[4])
+faces(c::QuadShell) = ((c.nodes[1],c.nodes[2],c.nodes[4],c.nodes[3]), (c.nodes[1],c.nodes[3],c.nodes[4],c.nodes[2]))
 
 # random stuff
 default_interpolation(::Type{Line}) = Lagrange{1,RefCube,1}()
