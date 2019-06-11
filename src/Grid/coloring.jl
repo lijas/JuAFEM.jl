@@ -1,9 +1,10 @@
 # Greedy algorithm for coloring a grid such that no two cells with the same node
 # have the same color
-function create_coloring(g::Grid)
+function create_coloring(g::Grid, cellset::Vector{Int} = collect(1:getncells(g)))
     # Contains the elements that each node contain
     cell_containing_node = Dict{Int, Set{Int}}()
-    for (cellid, cell) in enumerate(g.cells)
+    for cellid in cellset
+        cell = g.cells[cellid]
         for v in cell.nodes
             if !haskey(cell_containing_node, v)
                 cell_containing_node[v] = Set{Int}()
@@ -32,11 +33,11 @@ function create_coloring(g::Grid)
     final_colors = Vector{Int}[]
     occupied_colors = Set{Int}()
     # Zero represents no color set yet
-    for cellid in 1:length(g.cells)
+    for cellid in cellset#1:length(g.cells)
         cell_colors[cellid] = 0
     end
     total_colors = 0
-    for cellid in 1:length(g.cells)
+    for cellid in cellset#1:length(g.cells)
         empty!(occupied_colors)
         # loop over neighbors
         for r in nzrange(incidence_matrix, cellid)
