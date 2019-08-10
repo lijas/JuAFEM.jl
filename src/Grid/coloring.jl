@@ -37,10 +37,10 @@ function create_coloring(g::Grid, cellset::Vector{Int} = collect(1:getncells(g))
         cell_colors[cellid] = 0
     end
     total_colors = 0
-    for cellid in cellset#1:length(g.cells)
+    for (ic, cellid) in enumerate(cellset)#1:length(g.cells)
         empty!(occupied_colors)
         # loop over neighbors
-        for r in nzrange(incidence_matrix, cellid)
+        for r in nzrange(incidence_matrix, ic)#cellid)
             cell_neighbour = incidence_matrix.rowval[r]
             color = cell_colors[cell_neighbour]
             if color != 0
