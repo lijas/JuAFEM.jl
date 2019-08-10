@@ -5,6 +5,7 @@ function create_coloring(g::Grid, cellset::Vector{Int} = collect(1:getncells(g))
     if length(cellset) == 1
         cellid = cellset[1]
         final_colors = [[cellid]]
+        cell_colors = Dict{Int, Int}()
         cell_colors[cellid] = 1
         return cell_colors, final_colors
     end
