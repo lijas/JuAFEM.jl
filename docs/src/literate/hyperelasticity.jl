@@ -195,9 +195,9 @@ function solve()
     mp = NeoHooke(μ, λ)
 
     ## Finite element base
-    ip = Lagrange{3, refshape, 2}()
-    qr = QuadratureRule{3, refshape}(4)
-    qr_face = QuadratureRule{2, refshape}(4)
+    ip = Lagrange{3, refshape, 1}()
+    qr = QuadratureRule{3, refshape}(5)
+    qr_face = QuadratureRule{2, refshape}(5)
     cv = CellVectorValues(qr, ip, JuAFEM.default_interpolation(celltype))
     fv = FaceVectorValues(qr_face, ip, JuAFEM.default_interpolation(celltype))
 
