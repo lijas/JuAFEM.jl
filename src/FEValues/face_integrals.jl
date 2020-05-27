@@ -97,19 +97,19 @@ function create_face_quad_rule(quad_rule::QuadratureRule{2,shape,T}, ::Interpola
     face_quad_rule = QuadratureRule{3,shape,T}[]
 
     # Face 1
-    new_points = [Vec{3,T}((p[i][1], p[i][2], -one(T))) for i in 1:n_points] # ξ = t, η = s, ζ = -1
-    push!(face_quad_rule, QuadratureRule{3,shape,T}(w, new_points))
-    # Face 2
     new_points = [Vec{3,T}((p[i][1], -one(T), p[i][2])) for i in 1:n_points] # ξ = t, η = -1, ζ = s
     push!(face_quad_rule, QuadratureRule{3,shape,T}(w, new_points))
-    # Face 3
+    # Face 2
     new_points = [Vec{3,T}((one(T), p[i][1], p[i][2])) for i in 1:n_points] # ξ = 1, η = t, ζ = s
     push!(face_quad_rule, QuadratureRule{3,shape,T}(w, new_points))
-    # Face 4
+    # Face 3
     new_points = [Vec{3,T}((p[i][1], one(T), p[i][2])) for i in 1:n_points] # ξ = t, η = 1, ζ = s
     push!(face_quad_rule, QuadratureRule{3,shape,T}(w, new_points))
-    # Face 5
+    # Face 4
     new_points = [Vec{3,T}((-one(T), p[i][1], p[i][2])) for i in 1:n_points] # ξ = -1, η = t, ζ = s
+    push!(face_quad_rule, QuadratureRule{3,shape,T}(w, new_points))
+    # Face 5
+    new_points = [Vec{3,T}((p[i][1], p[i][2], -one(T))) for i in 1:n_points] # ξ = t, η = s, ζ = -1
     push!(face_quad_rule, QuadratureRule{3,shape,T}(w, new_points))
     # Face 6
     new_points = [Vec{3,T}((p[i][1], p[i][2], one(T))) for i in 1:n_points] # ξ = t, η = s, ζ = 1
@@ -120,11 +120,11 @@ end
 
 function weighted_normal(J::Tensor{2,3}, ::FaceValues{3,T,RefCube}, face::Int) where {T}
     @inbounds begin
-        face == 1 && return J[:,2] × J[:,1]
-        face == 2 && return J[:,1] × J[:,3]
-        face == 3 && return J[:,2] × J[:,3]
-        face == 4 && return J[:,3] × J[:,1]
-        face == 5 && return J[:,3] × J[:,2]
+        face == 1 && return J[:,1] × J[:,3]
+        face == 2 && return J[:,2] × J[:,3]
+        face == 3 && return J[:,3] × J[:,1]
+        face == 4 && return J[:,3] × J[:,2]
+        face == 5 && return J[:,2] × J[:,1]
         face == 6 && return J[:,1] × J[:,2]
     end
     throw(ArgumentError("unknown face number: $face"))
