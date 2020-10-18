@@ -159,10 +159,10 @@ function close!(dh::MixedDofHandler{dim}) where {dim}
 
     # Create dicts that stores created dofs
     # Each key should uniquely identify the given type
-    vertexdicts = [Dict{Int, Array{Int}}() for _ in 1:numfields]
-    edgedicts = [Dict{Tuple{Int,Int}, Array{Int}}() for _ in 1:numfields]
-    facedicts = [Dict{Tuple{Int,Int}, Array{Int}}() for _ in 1:numfields]
-    celldicts = [Dict{Int, Array{Int}}() for _ in 1:numfields]
+    vertexdicts = [Dict{Int, Int}() for _ in 1:numfields]
+    edgedicts = [Dict{Tuple{Int,Int}, Int}() for _ in 1:numfields]
+    facedicts = [Dict{Tuple{Int,Int}, Int}() for _ in 1:numfields]
+    celldicts = [Dict{Int, Int}() for _ in 1:numfields]
 
     # Set initial values
     nextdof = 1  # next free dof to distribute
@@ -211,11 +211,6 @@ function _close!(dh::MixedDofHandler{dim}, cellnumbers, field_names, field_dims,
     ip_infos = JuAFEM.InterpolationInfo[]
     for interpolation in field_interpolations
         ip_info = JuAFEM.InterpolationInfo(interpolation)
-        # these are not implemented yet (or have not been tested)
-        @assert(ip_info.nvertexdofs <= 1)
-        @assert(ip_info.nedgedofs <= 1)
-        @assert(ip_info.nfacedofs <= 1)
-        @assert(ip_info.ncelldofs <= 1)  # not tested but probably works
         push!(ip_infos, ip_info)
     end
 
@@ -232,19 +227,23 @@ function _close!(dh::MixedDofHandler{dim}, cellnumbers, field_names, field_dims,
             ip_info = ip_infos[fi]
 
             if ip_info.nvertexdofs > 0
-                nextdof = add_vertex_dofs(cell_dofs, cell, vertexdicts[fi], field_dims[fi], ip_info.nvertexdofs, nextdof)
+                sortfunc = (vertex) -> vertex
+                nextdof = _add_dofs(cell_dofs, cell, vertexdicts[fi], field_dims[fi], ip_info.nvertexdofs, nextdof, JuAFEM.vertices, sortfunc)
             end
                    
             if ip_info.nedgedofs > 0 && dim == 3 #Edges only in 3d
-                nextdof = add_edge_dofs(cell_dofs, cell, edgedicts[fi], field_dims[fi], ip_info.nedgedofs, nextdof)
+                sortfunc = minmax
+                nextdof = _add_dofs(cell_dofs, cell, edgedicts[fi], field_dims[fi], ip_info.nedgedofs, nextdof, JuAFEM.edges, sortfunc)
             end
 
             if ip_info.nfacedofs > 0 && (ip_info.dim == dim)
-                nextdof = add_face_dofs(cell_dofs, cell, facedicts[fi], field_dims[fi], ip_info.nfacedofs, nextdof)
+                sortfunc = JuAFEM.sortface
+                nextdof = _add_dofs(cell_dofs, cell, facedicts[fi], field_dims[fi], ip_info.nfacedofs, nextdof, JuAFEM.faces, sortfunc)
             end
             
             if ip_info.ncelldofs > 0
-                nextdof = add_cell_dofs(cell_dofs, ci, celldicts[fi], field_dims[fi], ip_info.ncelldofs, nextdof)
+                sortfunc = (cellid) -> cellid
+                nextdof = _add_dofs(cell_dofs, ci, celldicts[fi], field_dims[fi], ip_info.ncelldofs, nextdof, (cell) -> ci, sortfunc)
             end
 
         end
@@ -257,68 +256,74 @@ function _close!(dh::MixedDofHandler{dim}, cellnumbers, field_names, field_dims,
     return nextdof
 end
 
+#Use the variable name "face" here, but use for edge, vertex or cell aswell
+function _add_dofs(cell_dofs, cell, dict, field_dim, nfacedofs, nextdof, faces::Function, sortface::Function)
+    for face in faces(cell) # or vertices(), edges()
+        key = sortface(face) # or sortedge(), sortedge()
+        nextdof = get_or_create_dofs!(nextdof, field_dim, nfacedofs, cell_dofs, dict, key)
+    end
+    return nextdof
+end
+
+function matrixrotate!(matrix, ntimes::Int)
+    for i in 1:ntimes
+        matrix .= reverse(transpose!(matrix), dims=2)
+    end
+end
+
+hexahedron_face_orintation(faceid::Int) = [false, true, false, false, true, true][faceid]
+
+#Use the variable name "face" here, but use for edge, vertex or cell aswell
+function add_face_dofs(cell_dofs, cell, dict, field_dim, nfacedofs, nextdof, faces::Function, sortface::Function)
+    for (i, face) in enumerate(faces(cell)) # or vertices(), edges()
+        key = sortface(face) # or sortedge(), sortedge()
+        
+        usedof = get!(dict, key) do 
+            visited = false
+            return nextdof, first(face)
+        end
+        
+        if visited
+            @debug println("      Creating next dof#$(nextdof)")
+            nrotations = firstindex( (id) -> id == firstid, face) - 2
+            nrotations = nrotations < 0 ? 3 : nrotations
+            nrows = isqrt(nfacedofs)
+            dofsmatrix = collect(CartesianIndices((nrows,nrows)))
+            matrixrotate!(dofsmatrix, nrotations)
+            append!(celldofs, dofsmatrix)
+        else
+
+        end
+
+        nextdof = get_or_create_dofs!(nextdof, field_dim, nfacedofs, cell_dofs, dict, key)
+    end
+    return nextdof
+end
+
 """
-Returns the next global dof number and an array of dofs.
-If dofs have already been created for the object (vertex, face) then simply return those, otherwise create new dofs.
+Add dofs to the cell_dofs vector, and return next available dof.
+If dofs have already been created for the object (vertex, face, edge), then simply reuse them, otherwise create new dofs.
 """
-function get_or_create_dofs!(nextdof, field_dim; dict, key)
+function get_or_create_dofs!(nextdof::Int, field_dim::Int, nfacedofs::Int, cell_dofs::Vector{Int}, dict::Dict, key)
 
-    token = Base.ht_keyindex2!(dict, key)
-    if token > 0  # vertex, face etc. visited before
-        # reuse stored dofs (TODO unless field is discontinuous)
-        @debug "\t\tkey: $key dofs: $(dict[key])  (reused dofs)"
-        return nextdof, dict[key]
-
-    else  # create new dofs
-        dofs = collect(nextdof : nextdof + field_dim-1)
-        @debug "\t\tkey: $key dofs: $dofs"
-        Base._setindex!(dict, dofs, key, -token) #
-        nextdof += field_dim
-        return nextdof, dofs
+    visited = true
+    usedof = get!(dict, key) do 
+        @debug println("      Creating next dof#$(nextdof)")
+        visited = false
+        return nextdof
     end
-end
 
-function add_vertex_dofs(cell_dofs, cell, vertexdict, field_dim, nvertexdofs, nextdof)
-    for vertex in JuAFEM.vertices(cell)
-        @debug "\tvertex #$vertex"
-        nextdof, dofs = get_or_create_dofs!(nextdof, field_dim, dict=vertexdict, key=vertex)
-        push!(cell_dofs, dofs...)
+    @debug visited && println("      Reusing dof#$(usedof)")
+
+    for _ in 1:nfacedofs # or nedgedofs, nvertexdofs, ncelldofs
+        for _ in 1:field_dim
+            push!(cell_dofs, usedof)
+            usedof += 1
+        end
     end
-    return nextdof
+
+    return visited ? nextdof : usedof
 end
-
-function add_face_dofs(cell_dofs, cell, facedict, field_dim, nfacedofs, nextdof)
-    @assert nfacedofs == 1 "Currently only supports interpolations with nfacedofs = 1"
-
-    for face in JuAFEM.faces(cell)
-        sface = JuAFEM.sortface(face)
-        @debug "\tface #$sface"
-        nextdof, dofs = get_or_create_dofs!(nextdof, field_dim, dict=facedict, key=sface)
-        push!(cell_dofs, dofs...)
-    end
-    return nextdof
-end
-
-function add_edge_dofs(cell_dofs, cell, edgedict, field_dim, nedgedofs, nextdof)
-    @assert nedgedofs == 1 "Currently only supports interpolations with nedgedofs = 1"
-    for edge in JuAFEM.edges(cell)
-        sedge, dir = JuAFEM.sortedge(edge)
-        @debug "\tedge #$sedge"
-        nextdof, dofs = get_or_create_dofs!(nextdof, field_dim, dict=edgedict, key=sedge)
-        push!(cell_dofs, dofs...)
-    end
-    return nextdof
-end
-
-function add_cell_dofs(cell_dofs, cell, celldict, field_dim, ncelldofs, nextdof)
-    for celldof in 1:ncelldofs
-        @debug "\tcell #$cell"
-        nextdof, dofs = get_or_create_dofs!(nextdof, field_dim, dict=celldict, key=cell)
-        push!(cell_dofs, dofs...)
-    end
-    return nextdof
-end
-
 
 # TODO if not too slow it can replace the "Grid-version"
 function _create_sparsity_pattern(dh::MixedDofHandler, sym::Bool)
