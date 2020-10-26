@@ -26,13 +26,13 @@ function Base.getindex(elvec::CellVector, el::Int)
     return elvec.values[offset:offset + elvec.length[el]-1]
  end
 
-struct MixedDofHandler{dim,C,T} <: JuAFEM.AbstractDofHandler
+struct MixedDofHandler{dim,C,T,G<:AbstractGrid} <: JuAFEM.AbstractDofHandler
     fieldhandlers::Vector{FieldHandler}
     cell_dofs::CellVector{Int}
     cell_nodes::CellVector{Int}
     cell_coords::CellVector{Vec{dim,T}}
     closed::ScalarWrapper{Bool}
-    grid::Grid{dim,C,T}
+    grid::G #Grid{dim,C,T}
     ndofs::ScalarWrapper{Int}
 end
 
