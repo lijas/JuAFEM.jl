@@ -23,7 +23,7 @@ for cell in CellIterator(grid)
 end
 ```
 """
-struct CellIterator{dim,C,T,G<:AbstractGrid,DH<:AbstractDofHandler}
+struct CellIterator{dim,C,T,G<:AbstractGrid,DH<:Union{AbstractDofHandler,Missing}}
     flags::UpdateFlags
     grid::G
     current_cellid::ScalarWrapper{Int}
@@ -47,10 +47,10 @@ struct CellIterator{dim,C,T,G<:AbstractGrid,DH<:AbstractDofHandler}
     function CellIterator{dim,C,T}(grid::Grid{dim,C,T}, cellset::AbstractVector{Int}, flags::UpdateFlags) where {dim,C,T}
         isconcretetype(C) || _check_same_celltype(grid, cellset)
         N = nnodes_per_cell(grid, first(cellset))
-        cell = ScalarWrapper(0)
+        cellid = ScalarWrapper(0)
         nodes = zeros(Int, N)
         coords = zeros(Vec{dim,T}, N)
-        return new{dim,C,T,typeof(grid),missing}(flags, grid, cell, nodes, coords)
+        return new{dim,C,T,typeof(grid),Missing}(flags, grid, cellid, nodes, coords, cellset)
     end
 end
 
@@ -85,11 +85,10 @@ Base.eltype(::Type{T})         where {T<:CellIterator} = T
 function reinit!(ci::CellIterator{dim,C}, i::Int) where {dim,C}
     ci.current_cellid[] = ci.cellset[i]
 
-    ci.flags.nodes  && cellnodes!(ci.nodes, ci.dh, ci.current_cellid[])
-    ci.flags.coords && cellcoords!(ci.coords, ci.dh, ci.current_cellid[])
-
-    if isdefined(ci, :dh) && ci.flags.celldofs # update celldofs
-        celldofs!(ci.celldofs, ci.dh, ci.current_cellid[])
+    if !ismissing(ci.dh)
+        ci.flags.nodes  && cellnodes!(ci.nodes, ci.dh, ci.current_cellid[])
+        ci.flags.coords && cellcoords!(ci.coords, ci.dh, ci.current_cellid[])
+        ci.flags.celldofs && celldofs!(ci.celldofs, ci.dh, ci.current_cellid[])
     end
     return ci
 end
