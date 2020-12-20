@@ -229,7 +229,7 @@ function update!(ch::ConstraintHandler, time::Real=0.0)
 end
 
 # for faces
-function _update!(values::Vector{Float64}, f::Function, faces::GeomIndexSets, field::Symbol, local_face_dofs::Vector{Int}, local_face_dofs_offset::Vector{Int},
+function _update!(values::Vector{Float64}, f::Function, faces::IndexSets, field::Symbol, local_face_dofs::Vector{Int}, local_face_dofs_offset::Vector{Int},
                   components::Vector{Int}, dh::AbstractDofHandler, facevalues::BCValues,
                   dofmapping::Dict{Int,Int}, time::T) where {T}
 
@@ -302,7 +302,7 @@ function WriteVTK.vtk_point_data(vtkfile, ch::ConstraintHandler)
         data = zeros(Float64, nd, getnnodes(ch.dh.grid))
         for dbc in ch.dbcs
             dbc.field_name != field && continue
-            if eltype(dbc.faces) <: GeomIndex
+            if eltype(dbc.faces) <: Index
                 functype = getgeometryfunction(eltype(dbc.faces))
                 for (cellidx, faceidx) in dbc.faces
                     for facenode in functype(ch.dh.grid.cells[cellidx])[faceidx]
@@ -429,7 +429,7 @@ function add!(ch::ConstraintHandler, fh::FieldHandler, dbc::Dirichlet)
     return ch
 end
 
-function _check_cellset_dirichlet(cellset::Set{Int}, faceset::GeomIndexSets)
+function _check_cellset_dirichlet(cellset::Set{Int}, faceset::IndexSets)
     for (cellid, faceidx) in faceset
         if !(cellid in cellset)
             error("You are trying to add a constraint to a face that is not in the cellset of the fieldhandler.")

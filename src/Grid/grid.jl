@@ -69,12 +69,8 @@ struct VertexIndex
     idx::Tuple{Int,Int} # cell and side
 end
 
-const GeomIndex = Union{FaceIndex, EdgeIndex, VertexIndex}
-const GeomIndexSets = Union{Set{FaceIndex},Set{EdgeIndex},Set{VertexIndex}}
-
-getgeometryfunction(::Type{FaceIndex}) = JuAFEM.faces
-getgeometryfunction(::Type{EdgeIndex}) = JuAFEM.edges
-getgeometryfunction(::Type{VertexIndex}) = JuAFEM.vertices
+const Index = Union{CellIndex, FaceIndex, EdgeIndex, VertexIndex}
+const IndexSets = Union{Set{CellIndex}, Set{FaceIndex},Set{EdgeIndex},Set{VertexIndex}}
 
 abstract type AbstractGrid{dim} end
 

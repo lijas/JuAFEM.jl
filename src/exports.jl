@@ -58,6 +58,8 @@ export
     FaceIndex,
     EdgeIndex,
     VertexIndex,
+    Index,
+    IndexSets,
     getcells,
     getncells,
     getnodes,
