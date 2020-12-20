@@ -117,6 +117,12 @@ function Base.push!(dh::MixedDofHandler, fh::FieldHandler)
         if getcelltype(dh.grid, first(fh.cellset)) != getcelltype(dh.grid, cellid)
             error("All cells in the field must be of the same celltype.")
         end
+
+        for fh2 in dh.fieldhandlers
+            if cellid in fh2.cellset
+                error("Cell no. $cellid is already in a field.")
+            end
+        end
     end
     
     push!(dh.fieldhandlers, fh)
