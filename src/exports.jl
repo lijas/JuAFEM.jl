@@ -59,7 +59,7 @@ export
     EdgeIndex,
     VertexIndex,
     Index,
-    IndexSet,
+    IndexSets,
     getcells,
     getncells,
     getnodes,

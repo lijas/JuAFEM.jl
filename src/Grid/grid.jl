@@ -70,8 +70,7 @@ struct VertexIndex
 end
 
 const Index = Union{CellIndex, FaceIndex, EdgeIndex, VertexIndex}
-const IndexSet = Union{Set{CellIndex}, Set{FaceIndex},Set{EdgeIndex},Set{VertexIndex}}
-const IndexVector = Union{Vector{CellIndex}, Vector{FaceIndex},Vector{EdgeIndex},Vector{VertexIndex}}
+const IndexSets = Union{Set{CellIndex}, Set{FaceIndex},Set{EdgeIndex},Set{VertexIndex}}
 
 abstract type AbstractGrid{dim} end
 

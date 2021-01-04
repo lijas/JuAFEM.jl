@@ -229,7 +229,7 @@ function update!(ch::ConstraintHandler, time::Real=0.0)
 end
 
 # for faces
-function _update!(values::Vector{Float64}, f::Function, faces::IndexSet, field::Symbol, local_face_dofs::Vector{Int}, local_face_dofs_offset::Vector{Int},
+function _update!(values::Vector{Float64}, f::Function, faces::IndexSets, field::Symbol, local_face_dofs::Vector{Int}, local_face_dofs_offset::Vector{Int},
                   components::Vector{Int}, dh::AbstractDofHandler, facevalues::BCValues,
                   dofmapping::Dict{Int,Int}, time::T) where {T}
 
@@ -429,7 +429,7 @@ function add!(ch::ConstraintHandler, fh::FieldHandler, dbc::Dirichlet)
     return ch
 end
 
-function _check_cellset_dirichlet(cellset::Set{Int}, faceset::IndexSet)
+function _check_cellset_dirichlet(cellset::Set{Int}, faceset::IndexSets)
     for (cellid, faceidx) in faceset
         if !(cellid in cellset)
             error("You are trying to add a constraint to a face that is not in the cellset of the fieldhandler.")
